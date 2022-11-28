@@ -360,7 +360,10 @@
 
       :list
       (let [fake-argument-def (use-nested-type argument-definition)]
-        (mapv #(process-literal-argument schema fake-argument-def %) arg-value)))))
+        ;; if arg-value is nil, should return nil (no coercion is required)
+        (if (nil? arg-value)
+          nil
+          (mapv #(process-literal-argument schema fake-argument-def %) arg-value))))))
 
 (defn ^:private decapitalize
   [s]

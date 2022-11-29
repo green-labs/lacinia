@@ -362,7 +362,8 @@
       (let [fake-argument-def (use-nested-type argument-definition)]
         ;; if arg-value is nil, should return nil (no coercion is required)
         (when (some? arg-value)
-          (mapv #(process-literal-argument schema fake-argument-def %) arg-value))))))
+          (let [fake-argument-def (use-nested-type argument-definition)]
+            (mapv #(process-literal-argument schema fake-argument-def %) arg-value))))))
 
 (defn ^:private decapitalize
   [s]

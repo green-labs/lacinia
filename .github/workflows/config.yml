@@ -33,4 +33,4 @@ jobs:
           key: cljdeps-${{ hashFiles('deps.edn') }}
 
       - name: Execute tests
-        run: clojure -X:dev:test
+        run: clojure -X:deps prep && clojure -X:dev:test

@@ -411,20 +411,23 @@
   "Merges two maps together.  Later map override earlier.
   If a key is sequential, then each element in the list is merged."
   [left right]
-  (cond
-    (nil? left) right
-    (nil? right) left
+  (let [null? (fn [x]
+                  (or (nil? x)
+                      (= x :com.walmartlabs.lacinia.schema/null)))]
+    (cond
+      (null? left) right
+      (null? right) left
 
-    (and (map? left) (map? right))
-    (merge-with deep-merge left right)
+      (and (map? left) (map? right))
+      (merge-with deep-merge left right)
 
-    (and (sequential? left) (sequential? right))
-    (mapv deep-merge left right)
+      (and (sequential? left) (sequential? right))
+      (mapv deep-merge left right)
 
-    (or (map? right) (sequential? right))
-    (throw (ex-info "unable to deep merge"
-                    {:left left
-                     :right right}))
+      (or (map? right) (sequential? right))
+      (throw (ex-info "unable to deep merge"
+                      {:left  left
+                       :right right}))
 
-    :else
-    right))
+      :else
+      right)))

@@ -89,6 +89,14 @@
     (is (= (deep-merge nil {:a 1})
            {:a 1})))
 
+  (testing "Merging with :com.walmartlabs.lacinia.schema/null values"
+    (is (= (deep-merge {:a 1} :com.walmartlabs.lacinia.schema/null)
+           {:a 1}))
+    (is (= (deep-merge :com.walmartlabs.lacinia.schema/null {:a 1})
+           {:a 1}))
+    (is (= (deep-merge :com.walmartlabs.lacinia.schema/null :com.walmartlabs.lacinia.schema/null)
+           :com.walmartlabs.lacinia.schema/null)))
+
   (testing "Merging with empty maps"
     (is (= (deep-merge {} {:a 1})
            {:a 1}))
@@ -99,4 +107,12 @@
     (is (= (deep-merge {:a {:b [1 2]}} {:a {:b [3 4]}})
            {:a {:b [3 4]}}))
     (is (= (deep-merge {:a [{:b 1} {:c 2}]} {:a [{:d 3} {:e 4}]})
-           {:a [{:b 1, :d 3} {:c 2, :e 4}]}))))
+           {:a [{:b 1, :d 3} {:c 2, :e 4}]})))
+
+  (testing "Nested :com.walmartlabs.lacinia.schema/null values"
+    (is (= (deep-merge {:a {:b :com.walmartlabs.lacinia.schema/null}} {:a {:b 1}})
+           {:a {:b 1}}))
+    (is (= (deep-merge {:a {:b 1}} {:a {:b :com.walmartlabs.lacinia.schema/null}})
+           {:a {:b 1}}))
+    (is (= (deep-merge {:a {:b :com.walmartlabs.lacinia.schema/null, :c 2}} {:a {:b 1, :c :com.walmartlabs.lacinia.schema/null}})
+           {:a {:b 1, :c 2}}))))

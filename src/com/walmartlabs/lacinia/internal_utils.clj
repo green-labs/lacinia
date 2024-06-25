@@ -412,6 +412,9 @@
   If a key is sequential, then each element in the list is merged."
   [left right]
   (cond
+    (nil? left) right
+    (nil? right) left
+
     (and (map? left) (map? right))
     (merge-with deep-merge left right)
 

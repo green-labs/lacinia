@@ -20,7 +20,8 @@
             [com.walmartlabs.lacinia.internal-utils :refer [cond-let]]
             [com.walmartlabs.lacinia.util :refer [as-error-map]]
             [com.walmartlabs.lacinia.resolve :as resolve]
-            [com.walmartlabs.lacinia.tracing :as tracing])
+            [com.walmartlabs.lacinia.tracing :as tracing]
+            [com.walmartlabs.lacinia.complexity-analysis :as complexity-analysis])
   (:import (clojure.lang ExceptionInfo)))
 
 (defn ^:private as-errors
@@ -33,11 +34,13 @@
 
   Returns a [[ResolverResult]] that will deliver the result map, or an exception."
   {:added "0.16.0"}
-  [parsed-query variables context]
-  {:pre [(map? parsed-query)
-         (or (nil? context)
-             (map? context))]}
-  (cond-let
+  ([parsed-query variables context]
+   (execute-parsed-query-async parsed-query variables context nil))
+  ([parsed-query variables context options]
+   {:pre [(map? parsed-query)
+          (or (nil? context)
+              (map? context))]}
+   (cond-let
     :let [{:keys [::tracing/timing-start]} parsed-query
           ;; Validation phase encompasses preparing with query variables and actual validation.
           ;; It's somewhat all mixed together.
@@ -56,10 +59,15 @@
     (seq validation-errors)
     (resolve/resolve-as {:errors validation-errors})
 
+    :let [complexity-error (complexity-analysis/complexity-analysis prepared options)]
+
+    (some? complexity-error)
+    (resolve/resolve-as {:errors complexity-error})
+
     :else
     (executor/execute-query (assoc context constants/parsed-query-key prepared
-                                           ::tracing/validation {:start-offset start-offset
-                                                                 :duration (tracing/duration start-nanos)}))))
+                                   ::tracing/validation {:start-offset start-offset
+                                                         :duration (tracing/duration start-nanos)})))))
 
 (defn execute-parsed-query
   "Prepares a query, by applying query variables to it, resulting in a prepared
@@ -76,7 +84,7 @@
          {:keys [timeout-ms timeout-error]
           :or {timeout-ms 0
                timeout-error {:message "Query execution timed out."}}} options
-         execution-result (execute-parsed-query-async parsed-query variables context)
+         execution-result (execute-parsed-query-async parsed-query variables context options)
          result (do
                   (resolve/on-deliver! execution-result *result)
                   ;; Block on that deliver, then return the final result.

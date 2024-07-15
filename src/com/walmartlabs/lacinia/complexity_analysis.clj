@@ -9,12 +9,15 @@
   [{:keys [arguments fragment-name selections field-name leaf?]
     :as   _selection} fragment-map]
   (match [(boolean leaf?) fragment-name]
+    ;; for leaf field
     [true _] nil
     [false nil] (cond-> {:field-name field-name}
                   selections (assoc :selections (mapcat #(parse-query % fragment-map) selections))
                   arguments (assoc :arguments arguments)
                   true vector)
+    ;; for inline fragment
     [false nil] (mapcat #(parse-query % fragment-map) selections)
+    ;; for named fragment
     [false _] (let [{fragment-selections :selections} (fragment-name fragment-map)]
                 (mapcat #(parse-query % fragment-map) fragment-selections))))
 

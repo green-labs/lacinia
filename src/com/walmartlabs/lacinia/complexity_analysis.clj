@@ -57,5 +57,5 @@
    (let [{:keys [fragments selections]} query
         pq (mapcat #(parse-query % fragments) selections)
         complexity (count-nodes pq)]
-    (when 
+    (when (> complexity max-complexity)
       {:message (format "Over max complexity! Current number of resources to be queried: %s" complexity)}))))

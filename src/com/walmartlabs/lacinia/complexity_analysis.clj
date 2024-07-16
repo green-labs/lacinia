@@ -8,7 +8,7 @@
    - named fragment -> fragment-name으로 fragment-map 조회 후 해당 fragment의 selections를 재귀 호출"
   [{:keys [arguments fragment-name selections field-name leaf?]
     :as   _selection} fragment-map]
-  (match [(boolean leaf?) fragment-name]
+  (match [leaf? fragment-name]
     ;; for leaf field
     [true _] nil
     [false nil] (cond-> {:field-name field-name}
@@ -16,9 +16,9 @@
                   arguments (assoc :arguments arguments)
                   true vector)
     ;; for inline fragment
-    [false nil] (mapcat #(parse-query % fragment-map) selections)
+    [nil nil] (mapcat #(parse-query % fragment-map) selections)
     ;; for named fragment
-    [false _] (let [{fragment-selections :selections} (fragment-name fragment-map)]
+    [nil _] (let [{fragment-selections :selections} (fragment-name fragment-map)]
                 (mapcat #(parse-query % fragment-map) fragment-selections))))
 
 (defn- count-nodes
@@ -31,11 +31,11 @@
   [{:keys [field-name selections arguments]}]
   (let [{:keys [first last limit]} arguments
         n-nodes                    (or first last limit 1)
-        leaf                       (seq selections)
+        leaf-node                  (seq selections)
         connection?                (->> selections
                                         (remove (fn [{:keys [field-name]}] (#{:edges :pageInfo} field-name)))
                                         empty?)]
-    (match [field-name connection? leaf]
+    (match [field-name connection? leaf-node]
       [:pageInfo _ nil] 0
       [_ _ nil] n-nodes
       [:edges _ _] (->> selections
@@ -53,8 +53,9 @@
 
 (defn complexity-analysis
   [query {:keys [max-complexity] :as _options}]
-  (let [{:keys [fragments selections]} query
+  (when max-complexity
+   (let [{:keys [fragments selections]} query
         pq (mapcat #(parse-query % fragments) selections)
         complexity (count-nodes pq)]
-    (when (and max-complexity (> complexity max-complexity))
-      {:message (format "Over max complexity! Current number of resources to be queried: %s" complexity)})))
+    (when 
+      {:message (format "Over max complexity! Current number of resources to be queried: %s" complexity)}))))

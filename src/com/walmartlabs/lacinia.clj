@@ -58,8 +58,9 @@
 
     (seq validation-errors)
     (resolve/resolve-as {:errors validation-errors})
-
-    :let [complexity-error (complexity-analysis/complexity-analysis prepared options)]
+    
+    :let [complexity-error (when (:max-complexity options)
+                             (complexity-analysis/complexity-analysis prepared options))]
 
     (some? complexity-error)
     (resolve/resolve-as {:errors complexity-error})

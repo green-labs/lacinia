@@ -18,19 +18,7 @@
    :else (cond-> {:field-name field-name}
            selections (assoc :selections (mapcat #(parse-query % fragment-map) selections))
            arguments (assoc :arguments arguments)
-           true vector))
-  #_(match [leaf? fragment-name]
-    ;; for leaf field
-    [true _] nil
-    [false nil] (cond-> {:field-name field-name}
-                  selections (assoc :selections (mapcat #(parse-query % fragment-map) selections))
-                  arguments (assoc :arguments arguments)
-                  true vector)
-    ;; for inline fragment
-    [nil nil] (mapcat #(parse-query % fragment-map) selections)
-    ;; for named fragment
-    [nil _] (let [{fragment-selections :selections} (fragment-name fragment-map)]
-              (mapcat #(parse-query % fragment-map) fragment-selections))))
+           true vector)))
 
 (defn- count-nodes
   "- pageInfo -> 0 반환
@@ -39,9 +27,7 @@
    - connection o -> connection은 resource가 아니므로 연산에서 제외되어야 합니다.
                   -> selections에 대해 재귀호출 후 합연산 후 n-nodes 만큼 곱해줍니다.
    - connection x -> selections에 대해 재귀호출 후 합연산 후 n-nodes 만큼 곱해준 결과에 n-nodes를 더해줍니다"
-  [{:keys [field-name selections arguments]}] 
-  #_(cond-let
-   (and (= field-name :pageInfo) ))
+  [{:keys [field-name selections arguments]}]
   (let [{:keys [first last limit]} arguments
         n-nodes                    (or first last limit 1)
         leaf-node                  (seq selections)

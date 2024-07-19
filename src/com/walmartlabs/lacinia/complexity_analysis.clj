@@ -1,9 +1,7 @@
 (ns com.walmartlabs.lacinia.complexity-analysis
-  (:require [clojure.core.match :refer [match]]
-            [com.walmartlabs.lacinia.internal-utils :refer [cond-let]]
-            [com.walmartlabs.lacinia.selection :as selection]))
+  (:require [com.walmartlabs.lacinia.selection :as selection]))
 
-(defn- parse-query
+(defn^:private summarize-query
   "- leaf field -> nil
    - field & selection -> arguments 있으면 추가로 파싱해서 세팅 후 selections 재귀 호출
    - inline fragment -> selections를 재귀 호출
@@ -13,16 +11,16 @@
   (cond
    leaf? nil
    (= :named-fragment (selection/selection-kind selection)) (let [{fragment-selections :selections} (fragment-name fragment-map)]
-                                                              (mapcat #(parse-query % fragment-map) fragment-selections))
-   (= :inline-fragment (selection/selection-kind selection)) (mapcat #(parse-query % fragment-map) selections)
+                                                              (mapcat #(summarize-query % fragment-map) fragment-selections))
+   (= :inline-fragment (selection/selection-kind selection)) (mapcat #(summarize-query % fragment-map) selections)
    :else (cond-> {:field-name field-name}
-           selections (assoc :selections (mapcat #(parse-query % fragment-map) selections))
+           selections (assoc :selections (mapcat #(summarize-query % fragment-map) selections))
            arguments (assoc :arguments arguments)
            true vector)))
 
-(defn- count-nodes
+(defn^:private calculate-complexity
   "- pageInfo -> 0 반환
-   - leaf -> n-nodes(pagination arg를 통해 조회될 resource 갯수) 반환
+   - leaf-node -> n-nodes(pagination arg를 통해 조회될 resource 갯수) 반환
    - edges -> selections에 대해 재귀호출 후 합연산
    - connection o -> connection은 resource가 아니므로 연산에서 제외되어야 합니다.
                   -> selections에 대해 재귀호출 후 합연산 후 n-nodes 만큼 곱해줍니다.
@@ -34,27 +32,26 @@
         connection?                (->> selections
                                         (remove (fn [{:keys [field-name]}] (#{:edges :pageInfo} field-name)))
                                         empty?)]
-    (match [field-name connection? leaf-node]
-      [:pageInfo _ nil] 0
-      [_ _ nil] n-nodes
-      [:edges _ _] (->> selections
-                        (map #(count-nodes %))
-                        (reduce +))
-      [_ true _] (->> selections
-                      (map #(count-nodes %))
-                      (reduce +)
-                      (* n-nodes))
-      [_ false _] (->> selections
-                       (map #(count-nodes %))
+    (cond
+      (= field-name :pageInfo) 0
+      (nil? leaf-node) n-nodes
+      (= field-name :edges) (->> selections
+                                 (map #(calculate-complexity %))
+                                 (reduce +))
+      connection? (->> selections
+                       (map #(calculate-complexity %))
                        (reduce +)
-                       (* n-nodes)
-                       (+ n-nodes)))))
+                       (* n-nodes))
+      (false? connection?) (->> selections
+                                (map #(calculate-complexity %))
+                                (reduce +)
+                                (* n-nodes)
+                                (+ n-nodes)))))
 
 (defn complexity-analysis
   [query {:keys [max-complexity] :as _options}]
   (let [{:keys [fragments selections]} query
-        pq (mapcat #(parse-query % fragments) selections)
-        complexity (count-nodes pq)]
-    (prn complexity pq)
+        pq (mapcat #(summarize-query % fragments) selections)
+        complexity (calculate-complexity pq)]
     (when (> complexity max-complexity)
       {:message (format "Over max complexity! Current number of resources to be queried: %s" complexity)})))

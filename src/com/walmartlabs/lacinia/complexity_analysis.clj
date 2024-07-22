@@ -1,9 +1,6 @@
 (ns com.walmartlabs.lacinia.complexity-analysis
   (:require [com.walmartlabs.lacinia.selection :as selection]
-            [com.walmartlabs.lacinia.internal-utils :refer [cond-let]]
-            [clojure.walk]))
-
-
+            [com.walmartlabs.lacinia.internal-utils :refer [cond-let]]))
 
 (declare ^:private summarize-selection)
 

@@ -4,11 +4,11 @@
 
 (declare ^:private summarize-selection)
 
-(defn summarize-selections
+(defn ^:private summarize-selections
   [selections fragment-map]
   (mapcat #(summarize-selection % fragment-map) selections))
 
-(defn summarize-field
+(defn ^:private summarize-field
   "- leaf field -> nil
    - pageInfo -> nil
    - edges -> 
@@ -42,7 +42,7 @@
                       (summarize-selections fragment-selections fragment-map))
     :inline-fragment (summarize-selections selections fragment-map)))
 
-(defn calculate-complexity
+(defn ^:private calculate-complexity
   [{:keys [selections list-args? n-nodes]}]
   (let [children-complexity (apply + (map calculate-complexity selections))]
     (if list-args?

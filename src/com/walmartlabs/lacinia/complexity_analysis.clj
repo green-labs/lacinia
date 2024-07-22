@@ -55,7 +55,7 @@
 (defn complexity-analysis
   [query {:keys [max-complexity] :as _options}]
   (let [{:keys [fragments selections]} query
-        pq (summarize-selections selections fragments)
-        complexity (calculate-complexity (first pq))] 
+        summarized-selections (summarize-selections selections fragments)
+        complexity (calculate-complexity (first summarized-selections))] 
     (when (> complexity max-complexity)
       {:message (format "Over max complexity! Current number of resources to be queried: %s" complexity)})))

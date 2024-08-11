@@ -1,0 +1,11 @@
+{:Query
+ {:fields
+  {:user {:type :User,
+          :args {:by {:type (non-null :UserByInput)}}
+          :resolve :queries/user}}},
+
+ :input-objects
+ {:UserByInput
+  {:fields {:id {:type ID},
+            :email {:type String}},
+   :directives [{:directive-type :oneOf}]}}}

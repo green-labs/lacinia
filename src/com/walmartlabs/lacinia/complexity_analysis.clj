@@ -1,46 +1,35 @@
 (ns com.walmartlabs.lacinia.complexity-analysis
-  (:require [com.walmartlabs.lacinia.selection :as selection]
-            [com.walmartlabs.lacinia.internal-utils :refer [cond-let]]))
+  (:require [com.walmartlabs.lacinia.selection :as selection]))
 
-(declare ^:private summarize-selection)
+(defn- list-args? [arguments]
+  (some? (or (:first arguments)
+             (:last arguments))))
 
-(defn ^:private summarize-selections
-  [selections fragment-map]
-  (mapcat #(summarize-selection % fragment-map) selections))
+(defn- summarize-selection
+  "Recursively summarizes the selection, handling field, inline fragment, and named fragment."
+  [{:keys [arguments selections field-name leaf? fragment-name] :as selection} fragment-map]
+  (let [selection-kind (selection/selection-kind selection)]
+    (cond
+      ;; If it's a leaf node or `pageInfo`, return nil.
+      (or leaf? (= :pageInfo field-name))
+      nil
 
-(defn ^:private summarize-field
-  "- leaf field -> nil
-   - pageInfo -> nil
-   - edges -> 
-   - else -> "
-  [{:keys [arguments selections field-name leaf?]} fragment-map]
-  (cond-let
-   leaf? nil
-   (= :pageInfo field-name) nil
-   (= :edges field-name) (summarize-field (first selections) fragment-map)
-   :let [n-nodes (-> arguments
-                     (select-keys [:first :last :take :limit])
-                     vals
-                     first)
-         n-nodes' (or n-nodes 1)]
+      ;; If it's a named fragment, look it up in the fragment-map and process its selections.
+      (= :named-fragment selection-kind)
+      (let [sub-selections (:selections (fragment-map fragment-name))]
+        (mapcat #(summarize-selection % fragment-map) sub-selections))
 
-   :else (-> {:field-name field-name}
-             (assoc :selections (summarize-selections selections fragment-map))
-             (assoc :list-args? (some? n-nodes))
-             (assoc :n-nodes n-nodes')
-             vector)))
+      ;; If it's an inline fragment or  `edges` field, process its selections.
+      (or (= :inline-fragment selection-kind) (= field-name :edges))
+      (mapcat #(summarize-selection % fragment-map) selections)
 
-(defn ^:private summarize-selection
-  "- field -> summarize-field 에서 처리
-   - inline fragment -> selections를 재귀 호출
-   - named fragment -> fragment-name으로 fragment-map 조회 후 해당 fragment의 selections를 재귀 호출 "
-  [{:keys [fragment-name selections]
-    :as   selection} fragment-map]
-  (case (selection/selection-kind selection)
-    :field (summarize-field selection fragment-map)
-    :named-fragment (let [{fragment-selections :selections} (fragment-name fragment-map)]
-                      (summarize-selections fragment-selections fragment-map))
-    :inline-fragment (summarize-selections selections fragment-map)))
+      ;; Otherwise, handle a regular field with potential nested selections.
+      :else
+      (let [n-nodes (or (-> arguments (select-keys [:first :last]) vals first) 1)]
+        [{:field-name field-name
+          :selections (mapcat #(summarize-selection % fragment-map) selections)
+          :list-args? (list-args? arguments)
+          :n-nodes n-nodes}]))))
 
 (defn ^:private calculate-complexity
   [{:keys [selections list-args? n-nodes]}]
@@ -52,7 +41,7 @@
 (defn complexity-analysis
   [query {:keys [max-complexity] :as _options}]
   (let [{:keys [fragments selections]} query
-        summarized-selections (summarize-selections selections fragments)
+        summarized-selections (mapcat #(summarize-selection % fragments) selections)
         complexity (calculate-complexity (first summarized-selections))] 
     (when (> complexity max-complexity)
       {:message (format "Over max complexity! Current number of resources to be queried: %s" complexity)})))

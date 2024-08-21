@@ -1,4 +1,8 @@
-{:objects
+{:queries {:node
+           {:type (non-null :Node)
+            :args {:id {:type (non-null ID)}}
+            :resolve :resolve-node}}
+ :objects
  {:PageInfo
   {:fields {:startCursor {:type (non-null String)}
             :endCursor {:type (non-null String)}
@@ -22,26 +26,29 @@
 
   :ProductConnection
   {:implements [:Connection]
-   :fields {:edges {:type (non-null (list (non-null :ProductEdge)))}}}
+   :fields {:edges {:type (non-null (list (non-null :ProductEdge)))}
+            :pageInfo {:type (non-null :PageInfo)}}}
   
   :ProductEdge
   {:implements [:Edge]
    :fields {:cursor {:type (non-null String)}
-            :node {:type (non-null :Product)}}}
+            :node {:type (non-null :Node)}}}
 
   :ReviewConnection
   {:implements [:Connection]
-   :fields {:edges {:type (non-null (list (non-null :ReviewEdge)))}}}
+   :fields {:edges {:type (non-null (list (non-null :ReviewEdge)))}
+            :pageInfo {:type (non-null :PageInfo)}}}
 
   :ReviewEdge
   {:implements [:Edge]
    :fields {:cursor {:type (non-null String)}
-            :node {:type (non-null :Review)}}}
+            :node {:type (non-null :Node)}}}
 
   :Review
-  {:fields {:id {:type (non-null ID)}
-            :author {:type :Author}
-            :post {:type :Post}}}
+  {:implements [:Node]
+   :fields {:id {:type (non-null ID)}
+            :author {:type (non-null :User)}
+            :product {:type (non-null :Product)}}}
 
   :Seller
   {:implements [:Node]
@@ -49,7 +56,8 @@
             :name {:type (non-null String)}
             :products
             {:type (non-null :ProductConnection)
-             :args {:first {:type (non-null Int)}}
+             :args {:first {:type Int}
+                    :last {:type Int}}
              :resolve :resolve-products}}}
   
   :Buyer
@@ -58,17 +66,19 @@
             :name {:type (non-null String)}
             :followings
             {:type (non-null :UserConnection)
-             :args {:first {:type (non-null Int)}}
+             :args {:first {:type Int}
+                    :last {:type Int}}
              :resolve :resolve-followings}}}
 
   :UserConnection
   {:implements [:Connection]
-   :fields {:edges {:type (non-null (list (non-null :UserEdge)))}}}
+   :fields {:edges {:type (non-null (list (non-null :UserEdge)))}
+            :pageInfo {:type (non-null :PageInfo)}}}
 
   :UserEdge
   {:implements [:Edge]
    :fields {:cursor {:type (non-null String)}
-            :node {:type (non-null :User)}}}}
+            :node {:type (non-null :Node)}}}}
  
  :interfaces
  {:Node {:fields {:id {:type (non-null ID)}}}

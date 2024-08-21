@@ -1,11 +1,11 @@
 (ns com.walmartlabs.lacinia.complexity-analysis
   (:require [com.walmartlabs.lacinia.selection :as selection]))
 
-(defn- list-args? [arguments]
+(defn ^:private list-args? [arguments]
   (some? (or (:first arguments)
              (:last arguments))))
 
-(defn- summarize-selection
+(defn ^:private summarize-selection
   "Recursively summarizes the selection, handling field, inline fragment, and named fragment."
   [{:keys [arguments selections field-name leaf? fragment-name] :as selection} fragment-map]
   (let [selection-kind (selection/selection-kind selection)]

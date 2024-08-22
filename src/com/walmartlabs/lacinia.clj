@@ -59,13 +59,11 @@
     (seq validation-errors)
     (resolve/resolve-as {:errors validation-errors})
 
-    :let [complexity-error (when (:max-complexity options)
+    :let [complexity-warning (when (:max-complexity options)
                              (complexity-analysis/complexity-analysis prepared options))] 
 
     :else (executor/execute-query (assoc context constants/parsed-query-key prepared
-                                         :warnings (if complexity-error
-                                                     (atom [complexity-error])
-                                                     (atom []))
+                                         :complexity-warning complexity-warning 
                                          ::tracing/validation {:start-offset start-offset
                                                                :duration (tracing/duration start-nanos)})))))
 

@@ -4,8 +4,7 @@
                   :node {:type (non-null :Node)}}}
   :Connection {:fields {:edges {:type (non-null (list (non-null :Edge)))}
                         :pageInfo {:type (non-null :PageInfo)}}}
-  :User {:implements [:Node]
-         :fields {:id {:type (non-null ID)}
+  :User {:fields {:id {:type (non-null ID)}
                   :name {:type (non-null String)}}}}
  
 :objects

@@ -383,7 +383,7 @@
     (binding [resolve/*callback-executor* executor]
       (let [enabled-selections (remove :disabled? selections)
             *errors (atom [])
-            *warnings (atom [])
+            *warnings (:warnings context)
             *extensions (atom {})
             *resolver-tracing (when (::tracing/enabled? context)
                                 (atom []))

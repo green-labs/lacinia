@@ -58,17 +58,16 @@
 
     (seq validation-errors)
     (resolve/resolve-as {:errors validation-errors})
-    
+
     :let [complexity-error (when (:max-complexity options)
-                             (complexity-analysis/complexity-analysis prepared options))]
+                             (complexity-analysis/complexity-analysis prepared options))] 
 
-    (some? complexity-error)
-    (resolve/resolve-as {:errors complexity-error})
-
-    :else
-    (executor/execute-query (assoc context constants/parsed-query-key prepared
-                                   ::tracing/validation {:start-offset start-offset
-                                                         :duration (tracing/duration start-nanos)})))))
+    :else (executor/execute-query (assoc context constants/parsed-query-key prepared
+                                         :warnings (if complexity-error
+                                                     (atom [complexity-error])
+                                                     (atom []))
+                                         ::tracing/validation {:start-offset start-offset
+                                                               :duration (tracing/duration start-nanos)})))))
 
 (defn execute-parsed-query
   "Prepares a query, by applying query variables to it, resulting in a prepared
@@ -86,6 +85,7 @@
           :or {timeout-ms 0
                timeout-error {:message "Query execution timed out."}}} options
          execution-result (execute-parsed-query-async parsed-query variables context options)
+         _ (prn execution-result)
          result (do
                   (resolve/on-deliver! execution-result *result)
                   ;; Block on that deliver, then return the final result.

@@ -14,7 +14,7 @@
 
 (ns com.walmartlabs.lacinia.complexity-analysis-test 
   (:require
-   [clojure.test :refer [deftest is run-test]]
+   [clojure.test :refer [deftest is run-test testing]]
    [com.walmartlabs.lacinia :refer [execute]]
    [com.walmartlabs.test-utils :as utils]))
 
@@ -56,8 +56,10 @@
   (utils/simplify (execute schema query variables nil {:max-complexity 10})))
 
 (deftest over-complexity-analysis
-  (is (= {:errors {:message "Over max complexity! Current number of resources to be queried: 22"}}
-         (q "query ProductDetail($productId: ID){
+  (testing "It is possible to calculate the complexity of a query in the Relay connection spec 
+            by taking into account both named fragments and inline fragments."
+    (is (= {:errors {:message "Over max complexity! Current number of resources to be queried: 27"}}
+           (q "query ProductDetail($productId: ID){
                node(id: $productId) {
                  ... on Product {
                    ...ProductLikersFragment
@@ -75,6 +77,9 @@
                      edges{
                        node{
                          id
+                         author{
+                           id
+                         }
                        }
                      }
                    }
@@ -85,11 +90,59 @@
                likers(first: 10){
                  edges{
                    node{
-                     id
+                     ... on Seller{
+                       id
+                     }
+                     ... on Buyer{
+                       id
+                     }
                    }
                  }
                }
-             }" {:productId "1"}))))
+             }" {:productId "id"}))))
+  (testing "If no arguments are passed in the query, the calculation uses the default value defined in the schema."
+    (is (= {:errors {:message "Over max complexity! Current number of resources to be queried: 22"}}
+           (q "query ProductDetail($productId: ID){
+                                node(id: $productId) {
+                                  ... on Product {
+                                    ...ProductLikersFragment
+                                    seller{
+                                      id
+                                      products(first: 5){
+                                        edges{
+                                          node{
+                                            id
+                                          }
+                                        }
+                                      }
+                                    }
+                                    reviews(first: 5){
+                                      edges{
+                                        node{
+                                          id
+                                          author{
+                                            id
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                              fragment ProductLikersFragment on Product {
+                                likers{
+                                  edges{
+                                    node{
+                                      ... on Seller{
+                                        id
+                                      }
+                                      ... on Buyer{
+                                        id
+                                      }
+                                    }
+                                  }
+                                }
+                              }" {:productId "id"})))))
 
 (comment
   (run-test over-complexity-analysis))

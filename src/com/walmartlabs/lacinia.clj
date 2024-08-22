@@ -83,7 +83,6 @@
           :or {timeout-ms 0
                timeout-error {:message "Query execution timed out."}}} options
          execution-result (execute-parsed-query-async parsed-query variables context options)
-         _ (prn execution-result)
          result (do
                   (resolve/on-deliver! execution-result *result)
                   ;; Block on that deliver, then return the final result.

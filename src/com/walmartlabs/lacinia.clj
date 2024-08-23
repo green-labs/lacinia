@@ -58,17 +58,13 @@
 
     (seq validation-errors)
     (resolve/resolve-as {:errors validation-errors})
-    
-    :let [complexity-error (when (:max-complexity options)
-                             (complexity-analysis/complexity-analysis prepared options))]
 
-    (some? complexity-error)
-    (resolve/resolve-as {:errors complexity-error})
-
-    :else
-    (executor/execute-query (assoc context constants/parsed-query-key prepared
-                                   ::tracing/validation {:start-offset start-offset
-                                                         :duration (tracing/duration start-nanos)})))))
+    :else (let [complexity-warning (when (:max-complexity options)
+                                     (complexity-analysis/complexity-analysis prepared options))]
+           (executor/execute-query (assoc context constants/parsed-query-key prepared
+                                          :complexity-warning complexity-warning
+                                          ::tracing/validation {:start-offset start-offset
+                                                                :duration (tracing/duration start-nanos)}))))))
 
 (defn execute-parsed-query
   "Prepares a query, by applying query variables to it, resulting in a prepared

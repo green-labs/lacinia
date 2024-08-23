@@ -41,8 +41,7 @@
 
 (defn ^:private resolve-node
   [_ _ _]
-  {:edges []
-   :pageInfo {}})
+  nil)
 
 (def ^:private schema
   (utils/compile-schema "complexity-analysis-error.edn"
@@ -58,7 +57,8 @@
 (deftest over-complexity-analysis
   (testing "It is possible to calculate the complexity of a query in the Relay connection spec 
             by taking into account both named fragments and inline fragments."
-    (is (= {:errors {:message "Over max complexity! Current number of resources to be queried: 27"}}
+    (is (= {:data {:node nil}
+            :extensions {:warnings [{:message "Over max complexity! Current number of resources to be queried: 27"}]}}
            (q "query ProductDetail($productId: ID){
                node(id: $productId) {
                  ... on Product {
@@ -101,7 +101,8 @@
                }
              }" {:productId "id"}))))
   (testing "If no arguments are passed in the query, the calculation uses the default value defined in the schema."
-    (is (= {:errors {:message "Over max complexity! Current number of resources to be queried: 22"}}
+    (is (= {:data {:node nil}
+            :extensions {:warnings [{:message "Over max complexity! Current number of resources to be queried: 22"}]}}
            (q "query ProductDetail($productId: ID){
                                 node(id: $productId) {
                                   ... on Product {

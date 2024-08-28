@@ -1693,6 +1693,54 @@
                       :directive-type directive-type
                       :allowed-locations (:locations directive)}))))))))
 
+(defn validate-implements
+  [schema object-def]
+  (doseq [interface-name (:implements object-def)
+          :let [interface (get schema interface-name)
+                type-name (:type-name object-def)]
+          _ (prn type-name)
+          [field-name interface-field] (:fields interface)
+          :let [object-field (get-nested object-def [:fields field-name])
+                interface-field-args (:args interface-field)
+                object-field-args (:args object-field)]]
+  
+    (when-not object-field
+      (throw (ex-info "Missing interface field in object definition."
+                      {:object type-name
+                       :field-name field-name
+                       :interface-name interface-name})))
+  
+    (when-not (is-assignable? schema interface-field object-field)
+      (prn (:qualified-name object-field) (:qualified-name interface-name))
+      (throw (ex-info "Object field is not compatible with extended interface type."
+                      {:interface-name interface-name
+                       :field-name (:qualified-name object-field)})))
+  
+    (when interface-field-args
+      (doseq [interface-field-arg interface-field-args
+              :let [[arg-name interface-arg-def] interface-field-arg
+                    object-field-arg-def (get object-field-args arg-name)]]
+  
+        (when-not object-field-arg-def
+          (throw (ex-info "Missing interface field argument in object definition."
+                          {:field-name (:qualified-name object-field)
+                           :interface-argument (:qualified-name interface-arg-def)})))
+  
+        (when-not (is-assignable? schema interface-arg-def object-field-arg-def)
+          (throw (ex-info "Object field's argument is not compatible with extended interface's argument type."
+                          {:interface-name interface-name
+                           :argument-name (:qualified-name object-field-arg-def)})))))
+  
+    (when-let [additional-args (seq (difference (into #{} (keys object-field-args))
+                                                (into #{} (keys interface-field-args))))]
+      (doseq [additional-arg-name additional-args
+              :let [arg-kind (get-nested object-field-args [additional-arg-name :type :kind])]]
+        (when (= arg-kind :non-null)
+          (throw (ex-info "Additional arguments on an object field that are not defined in extended interface cannot be required."
+                          {:interface-name interface-name
+                           :argument-name (-> object-field-args (get additional-arg-name) :qualified-name)})))))))
+
+
 (defn ^:private prepare-and-validate-interfaces
   "Invoked after compilation to add a :members set identifying which concrete types implement
   the interface.  Peforms final verification of types in fields and field arguments."
@@ -1702,6 +1750,7 @@
       (fn [interface]
         (verify-fields-and-args schema interface)
         (validate-directives-in-def schema interface :interface)
+        (validate-implements schema interface)
         (let [interface-name (:type-name interface)
               implementors (->> objects
                                 (filter #(-> % :implements interface-name))
@@ -1725,49 +1774,7 @@
   (verify-fields-and-args schema object-def)
   (let [object-def? (= :object (:category object-def))]
     (validate-directives-in-def schema object-def (if object-def? :object :input-object))
-    (doseq [interface-name (:implements object-def)
-            :let [interface (get schema interface-name)
-                  type-name (:type-name object-def)]
-            [field-name interface-field] (:fields interface)
-            :let [object-field (get-nested object-def [:fields field-name])
-                  interface-field-args (:args interface-field)
-                  object-field-args (:args object-field)]]
-
-      (when-not object-field
-        (throw (ex-info "Missing interface field in object definition."
-                 {:object type-name
-                  :field-name field-name
-                  :interface-name interface-name})))
-
-      (when-not (is-assignable? schema interface-field object-field)
-        (throw (ex-info "Object field is not compatible with extended interface type."
-                 {:interface-name interface-name
-                  :field-name (:qualified-name object-field)})))
-
-      (when interface-field-args
-        (doseq [interface-field-arg interface-field-args
-                :let [[arg-name interface-arg-def] interface-field-arg
-                      object-field-arg-def (get object-field-args arg-name)]]
-
-          (when-not object-field-arg-def
-            (throw (ex-info "Missing interface field argument in object definition."
-                            {:field-name (:qualified-name object-field)
-                             :interface-argument (:qualified-name interface-arg-def)})))
-
-          (when-not (is-assignable? schema interface-arg-def object-field-arg-def)
-            (throw (ex-info "Object field's argument is not compatible with extended interface's argument type."
-                            {:interface-name interface-name
-                             :argument-name (:qualified-name object-field-arg-def)})))))
-
-      (when-let [additional-args (seq (difference (into #{} (keys object-field-args))
-                                                  (into #{} (keys interface-field-args))))]
-        (doseq [additional-arg-name additional-args
-                :let [arg-kind (get-nested object-field-args [additional-arg-name :type :kind])]]
-          (when (= arg-kind :non-null)
-            (throw (ex-info "Additional arguments on an object field that are not defined in extended interface cannot be required."
-                            {:interface-name interface-name
-                             :argument-name (-> object-field-args (get additional-arg-name) :qualified-name)}))))))
-
+    (validate-implements schema object-def)
     (-> (apply-directive-arg-defaults schema object-def)
         (update-fields-in-object (fn [field-def]
                                    (cond-> (prepare-field schema object-def field-def)

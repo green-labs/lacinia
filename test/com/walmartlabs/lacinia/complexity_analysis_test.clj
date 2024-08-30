@@ -59,7 +59,7 @@
 (defn ^:private q [query variables]
   (utils/simplify (execute schema query variables nil {:analyze-query true})))
 
-(deftest over-complexity-analysis
+(deftest test-complexity-analysis
   (testing "It is possible to calculate the complexity of a query in the Relay connection spec 
             by taking into account both named fragments and inline fragments."
     (is (= {:data {:node nil}
@@ -155,4 +155,4 @@
                }" {:productId "id"})))))
 
 (comment
-  (run-test over-complexity-analysis))
+  (run-test test-complexity-analysis))

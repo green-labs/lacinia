@@ -380,14 +380,14 @@
         {:keys [selections operation-type ::tracing/timing-start]} parsed-query
         schema (get parsed-query constants/schema-key)
         ^Executor executor (::schema/executor schema)
-        complexity-warning (:complexity-warning context)]
+        analysis (:analysis context)]
     (binding [resolve/*callback-executor* executor]
       (let [enabled-selections (remove :disabled? selections)
             *errors (atom [])
-            *warnings (if complexity-warning
-                        (atom [complexity-warning])
-                        (atom []))
-            *extensions (atom {})
+            *warnings (atom [])
+            *extensions (if analysis
+                          (atom {:analysis analysis})
+                          (atom {}))
             *resolver-tracing (when (::tracing/enabled? context)
                                 (atom []))
             context' (assoc context constants/schema-key schema)

@@ -57,7 +57,8 @@
  :Seller
  {:implements [:Node :User]
   :fields {:id {:type (non-null ID)}
-           :name {:type (non-null String)}
+           :name {:type (non-null String)
+                  :resolve :resolve-name}
            :products
            {:type (non-null :ProductConnection)
             :args {:first {:type Int}}

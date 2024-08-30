@@ -84,4 +84,7 @@
  :queries {:node
            {:type :Node
             :args {:id {:type (non-null ID)}}
-            :resolve :resolve-node}}}
+            :resolve :resolve-node}
+           :root
+           {:type :String
+            :resolve :resolve-root}}}

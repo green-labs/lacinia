@@ -47,6 +47,10 @@
   [_ _ _]
   "name")
 
+(defn ^:private resolve-rooot
+  [_ _ _]
+  nil)
+
 (def ^:private schema
   (utils/compile-schema "complexity-analysis-error.edn"
                         {:resolve-products resolve-products
@@ -54,7 +58,8 @@
                          :resolve-reviews resolve-reviews
                          :resolve-likers resolve-likers
                          :resolve-node resolve-node
-                         :resolve-name resolve-name}))
+                         :resolve-name resolve-name
+                         :resolve-root resolve-rooot}))
 
 (defn ^:private q [query variables]
   (utils/simplify (execute schema query variables nil {:analyze-query true})))
@@ -152,7 +157,13 @@
                      }
                    }
                  }
-               }" {:productId "id"})))))
+               }" {:productId "id"}))))
+  (testing "If return type of root query is scala, then complexity is 0"
+    (is (= {:data {:root nil}
+            :extensions {:analysis {:complexity 0}}}
+           (q "query root{
+                 root
+               }" nil)))))
 
 (comment
   (run-test test-complexity-analysis))

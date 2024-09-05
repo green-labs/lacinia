@@ -15,18 +15,19 @@
 (ns com.walmartlabs.lacinia.executor
   "Mechanisms for executing parsed queries against compiled schemas."
   (:require
-    [com.walmartlabs.lacinia.internal-utils
-     :refer [cond-let q to-message
-             deep-merge keepv get-nested]]
-    [flatland.ordered.map :refer [ordered-map]]
-    [com.walmartlabs.lacinia.select-utils :as su]
-    [com.walmartlabs.lacinia.resolve-utils :refer [transform-result aggregate-results]]
-    [com.walmartlabs.lacinia.schema :as schema]
-    [com.walmartlabs.lacinia.resolve :as resolve
-     :refer [resolve-as resolve-promise]]
-    [com.walmartlabs.lacinia.tracing :as tracing]
-    [com.walmartlabs.lacinia.constants :as constants]
-    [com.walmartlabs.lacinia.selection :as selection])
+   [com.walmartlabs.lacinia.internal-utils
+    :refer [cond-let q to-message
+            deep-merge keepv get-nested]]
+   [flatland.ordered.map :refer [ordered-map]]
+   [com.walmartlabs.lacinia.select-utils :as su]
+   [com.walmartlabs.lacinia.resolve-utils :refer [transform-result aggregate-results]]
+   [com.walmartlabs.lacinia.schema :as schema]
+   [com.walmartlabs.lacinia.resolve :as resolve
+    :refer [resolve-as resolve-promise]]
+   [com.walmartlabs.lacinia.tracing :as tracing]
+   [com.walmartlabs.lacinia.constants :as constants]
+   [com.walmartlabs.lacinia.selection :as selection]
+   [com.walmartlabs.lacinia.query-analyzer :as query-analyzer])
   (:import (clojure.lang PersistentQueue)
            (java.util.concurrent Executor)))
 
@@ -379,15 +380,14 @@
   (let [parsed-query (get context constants/parsed-query-key)
         {:keys [selections operation-type ::tracing/timing-start]} parsed-query
         schema (get parsed-query constants/schema-key)
-        ^Executor executor (::schema/executor schema)
-        complexity-warning (:complexity-warning context)]
+        ^Executor executor (::schema/executor schema)]
     (binding [resolve/*callback-executor* executor]
       (let [enabled-selections (remove :disabled? selections)
             *errors (atom [])
-            *warnings (if complexity-warning
-                        (atom [complexity-warning])
-                        (atom []))
-            *extensions (atom {})
+            *warnings (atom [])
+            *extensions (if (::query-analyzer/enable? context)
+                          (atom {:analysis (query-analyzer/complexity-analysis parsed-query)})
+                          (atom {}))
             *resolver-tracing (when (::tracing/enabled? context)
                                 (atom []))
             context' (assoc context constants/schema-key schema)

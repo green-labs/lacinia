@@ -57,14 +57,14 @@
     :let [validation-errors (validator/validate prepared)]
 
     (seq validation-errors)
-    (resolve/resolve-as {:errors validation-errors})
+    (resolve/resolve-as {:errors validation-errors}) 
 
-    :else (let [analysis (when (:analyze-query options)
-                           (query-analyzer/complexity-analysis prepared))]
-           (executor/execute-query (assoc context constants/parsed-query-key prepared
-                                          ::query-analyzer/complexity analysis
-                                          ::tracing/validation {:start-offset start-offset
-                                                                :duration (tracing/duration start-nanos)}))))))
+    :else (let [context (assoc context constants/parsed-query-key prepared
+                               ::tracing/validation {:start-offset start-offset
+                                                     :duration (tracing/duration start-nanos)})
+                context' (cond-> context
+                           (:analyze-query options) (assoc ::query-analyzer/complexity (query-analyzer/complexity-analysis prepared)))]
+            (executor/execute-query context')))))
 
 (defn execute-parsed-query
   "Prepares a query, by applying query variables to it, resulting in a prepared

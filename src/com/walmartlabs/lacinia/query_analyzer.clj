@@ -44,3 +44,7 @@
         summarized-selections (mapcat #(summarize-selection % fragments) selections)
         complexity (apply + (map calculate-complexity summarized-selections))]
     {:complexity complexity}))
+
+(defn enable-query-analyzer
+  [context]
+  (assoc context ::enable? true))

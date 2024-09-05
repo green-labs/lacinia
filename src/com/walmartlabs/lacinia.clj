@@ -21,7 +21,7 @@
             [com.walmartlabs.lacinia.util :refer [as-error-map]]
             [com.walmartlabs.lacinia.resolve :as resolve]
             [com.walmartlabs.lacinia.tracing :as tracing]
-            [com.walmartlabs.lacinia.complexity-analysis :as complexity-analysis])
+            [com.walmartlabs.lacinia.query-analyzer :as query-analyzer])
   (:import (clojure.lang ExceptionInfo)))
 
 (defn ^:private as-errors
@@ -60,9 +60,9 @@
     (resolve/resolve-as {:errors validation-errors})
 
     :else (let [analysis (when (:analyze-query options)
-                           (complexity-analysis/complexity-analysis prepared))]
+                           (query-analyzer/complexity-analysis prepared))]
            (executor/execute-query (assoc context constants/parsed-query-key prepared
-                                          :analysis analysis
+                                          ::query-analyzer/complexity analysis
                                           ::tracing/validation {:start-offset start-offset
                                                                 :duration (tracing/duration start-nanos)}))))))
 

@@ -1,4 +1,4 @@
-(ns com.walmartlabs.lacinia.complexity-analysis
+(ns com.walmartlabs.lacinia.query-analyzer
   (:require [com.walmartlabs.lacinia.selection :as selection]))
 
 (defn ^:private list-args? [arguments]

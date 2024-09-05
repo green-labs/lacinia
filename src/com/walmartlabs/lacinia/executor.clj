@@ -27,7 +27,7 @@
    [com.walmartlabs.lacinia.tracing :as tracing]
    [com.walmartlabs.lacinia.constants :as constants]
    [com.walmartlabs.lacinia.selection :as selection]
-   [com.walmartlabs.lacinia.query-analyzer] :as query-analyzer)
+   [com.walmartlabs.lacinia.query-analyzer :as query-analyzer])
   (:import (clojure.lang PersistentQueue)
            (java.util.concurrent Executor)))
 

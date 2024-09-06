@@ -421,7 +421,7 @@
                                                                                          (::tracing/validation context)
                                                                                          @*resolver-tracing)
                                                                  errors (assoc :errors (distinct errors))
-                                                                 (and (nil? errors) (::query-analyzer/enable? context)) (assoc-in [:extension :analysis] (query-analyzer/complexity-analysis parsed-query))
+                                                                 (and (nil? errors) (::query-analyzer/enable? context)) (assoc-in [:extensions :analysis] (query-analyzer/complexity-analysis parsed-query))
                                                                  warnings (assoc-in [:extensions :warnings] (distinct warnings))))))))
                   (catch Throwable t
                     (resolve/deliver! result-promise t))))]

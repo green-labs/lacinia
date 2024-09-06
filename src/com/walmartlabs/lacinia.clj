@@ -77,7 +77,7 @@
           :or {timeout-ms 0
                timeout-error {:message "Query execution timed out."}}} options
          context' (cond-> context
-                   (:analyze-query options) query-analyzer/enable-query-analyzer)
+                    (:analyze-query options) query-analyzer/enable-query-analyzer)
          execution-result (execute-parsed-query-async parsed-query variables context')
          result (do
                   (resolve/on-deliver! execution-result *result)
@@ -90,7 +90,9 @@
      (when (instance? Throwable result)
        (throw result))
 
-     result)))
+     (if (:analyze-query options)
+       (assoc-in result [:extensions :analysis] (query-analyzer/complexity-analysis parsed-query))
+       result))))
 
 (defn execute
   "Given a compiled schema and a query string, attempts to execute it.

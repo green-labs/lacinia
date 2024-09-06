@@ -90,9 +90,7 @@
      (when (instance? Throwable result)
        (throw result))
 
-     (if (:analyze-query options)
-       (assoc-in result [:extensions :analysis] (query-analyzer/complexity-analysis parsed-query))
-       result))))
+     result)))
 
 (defn execute
   "Given a compiled schema and a query string, attempts to execute it.

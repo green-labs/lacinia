@@ -1,4 +1,4 @@
-(ns com.walmartlabs.lacinia.complexity-analysis
+(ns com.walmartlabs.lacinia.query-analyzer
   (:require [com.walmartlabs.lacinia.selection :as selection]))
 
 (defn ^:private list-args? [arguments]
@@ -10,7 +10,7 @@
   [{:keys [arguments selections field-name leaf? fragment-name] :as selection} fragment-map]
   (let [selection-kind (selection/selection-kind selection)]
     (cond
-      ;; If it's a leaf node or `pageInfo`, return nil.
+      ;; If it's a leaf or `pageInfo`, return nil.
       (or leaf? (= :pageInfo field-name))
       nil
 
@@ -39,9 +39,12 @@
       (+ n-nodes children-complexity))))
 
 (defn complexity-analysis
-  [query {:keys [max-complexity] :as _options}]
+  [query]
   (let [{:keys [fragments selections]} query
         summarized-selections (mapcat #(summarize-selection % fragments) selections)
-        complexity (calculate-complexity (first summarized-selections))] 
-    (when (> complexity max-complexity)
-      {:message (format "Over max complexity! Current number of resources to be queried: %s" complexity)})))
+        complexity (apply + (map calculate-complexity summarized-selections))]
+    {:complexity complexity}))
+
+(defn enable-query-analyzer
+  [context]
+  (assoc context ::enable? true))

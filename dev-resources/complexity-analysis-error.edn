@@ -55,14 +55,15 @@
    :fields {:edges {:type (non-null (list (non-null :ReviewEdge)))}
             :pageInfo {:type (non-null :PageInfo)}}}
 
-  :Seller
-  {:implements [:User]
-   :fields {:id {:type (non-null ID)}
-            :name {:type (non-null String)}
-            :products
-            {:type (non-null :ProductConnection)
-             :args {:first {:type Int}}
-             :resolve :resolve-products}}}
+ :Seller
+ {:implements [:Node :User]
+  :fields {:id {:type (non-null ID)}
+           :name {:type (non-null String)
+                  :resolve :resolve-name}
+           :products
+           {:type (non-null :ProductConnection)
+            :args {:first {:type Int}}
+            :resolve :resolve-products}}}
 
   :Buyer
   {:implements [:User]
@@ -86,4 +87,7 @@
  :queries {:node
            {:type :Node
             :args {:id {:type (non-null ID)}}
-            :resolve :resolve-node}}}
+            :resolve :resolve-node}
+           :root
+           {:type :String
+            :resolve :resolve-root}}}

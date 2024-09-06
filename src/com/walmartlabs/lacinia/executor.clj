@@ -412,6 +412,7 @@
                                            (let [errors (seq @*errors)
                                                  warnings (seq @*warnings)
                                                  extensions @*extensions]
+                                             (prn errors)
                                              (resolve/deliver! result-promise
                                                                (cond-> {:data (schema/collapse-nulls-in-map selected-data)}
                                                                  (seq extensions) (assoc :extensions extensions)
@@ -420,7 +421,7 @@
                                                                                          (::tracing/parsing parsed-query)
                                                                                          (::tracing/validation context)
                                                                                          @*resolver-tracing)
-                                                                 errors (assoc :errors (distinct errors))
+                                                                 errors (assoc :errors (distinct errors)) 
                                                                  (and (nil? errors) (::query-analyzer/enable? context)) (assoc-in [:extensions :analysis] (query-analyzer/complexity-analysis parsed-query))
                                                                  warnings (assoc-in [:extensions :warnings] (distinct warnings))))))))
                   (catch Throwable t

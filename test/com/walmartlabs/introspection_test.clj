@@ -1505,3 +1505,23 @@
                                    :line 1}]
                       :message "Cannot query field `__type' on type `Query'."}]}
            (execute schema q)))))
+
+(def ^:private specified-by-url-query 
+  "{
+     __type(name: \"DateTime\") {
+       name
+       kind
+       specifiedByUrl
+     }
+   }")
+
+(deftest scalar-specified-by-url
+  (let [schema (schema/compile {:scalars {:DateTime {:parse identity
+                                                     :serialize identity
+                                                     :specified-by "https://scalars.graphql.org/andimarek/date-time.html"}}})]
+    (is (= {:data
+            {:__type
+             {:kind :SCALAR
+              :name "DateTime"
+              :specifiedByUrl "https://scalars.graphql.org/andimarek/date-time.html"}}}
+           (utils/execute schema specified-by-url-query)))))

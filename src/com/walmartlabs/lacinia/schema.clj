@@ -38,9 +38,10 @@
     [clojure.pprint :as pprint]
     [com.walmartlabs.lacinia.selection :as selection])
   (:import
-    (clojure.lang IObj PersistentQueue)
-    (java.io Writer)
-    (java.util.concurrent Executor ThreadPoolExecutor TimeUnit LinkedBlockingQueue ThreadFactory)))
+   (java.net URL)
+   (clojure.lang IObj PersistentQueue)
+   (java.io Writer)
+   (java.util.concurrent Executor ThreadPoolExecutor TimeUnit LinkedBlockingQueue ThreadFactory)))
 
 ;; When using Clojure 1.8, the dependency on clojure-future-spec must be included,
 ;; and this code will trigger
@@ -289,6 +290,13 @@
   ([message data]
    (merge {:message message} data)))
 
+(defn url?
+  [url]
+  (try
+    (URL. url)
+    true
+    (catch Exception _ false)))
+
 ;;-------------------------------------------------------------------------------
 ;; ## Validations
 
@@ -397,6 +405,7 @@
                            :var var?))
 (s/def ::parse ::parse-or-serialize-fn)
 (s/def ::serialize ::parse-or-serialize-fn)
+(s/def ::specified-by url?)
 (s/def ::scalar (s/keys :opt-un [::description
                                  ::directives
                                  ::specified-by]

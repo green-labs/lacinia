@@ -629,6 +629,7 @@
 (s/def ::fn-map (s/map-of simple-keyword? ::field-fn))
 (s/def ::parse ::schema/parse-or-serialize-fn)
 (s/def ::serialize ::schema/parse-or-serialize-fn)
+(s/def ::specified-by string?)
 (s/def ::scalar-def (s/keys :req-un [::parse ::serialize]
                             :opt-un [::description ::specified-by]))
 (s/def ::description string?)

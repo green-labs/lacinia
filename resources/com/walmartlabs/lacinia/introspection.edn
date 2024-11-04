@@ -28,7 +28,9 @@
     :inputFields {:type (list :__InputValue)
                   :resolve :input-fields}
     :ofType {:type :__Type
-             :resolve :of-type}}}
+             :resolve :of-type}
+    :specifiedByUrl {:type String
+                     :resolve :specified-by-url}}}
 
   :__Field
   {:fields

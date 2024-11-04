@@ -280,6 +280,11 @@
                       (::type-map input-value)
                       (::default-value input-value)))
 
+(defn ^:private resolve-specified-by-url
+  [_ _ {:keys [::category ::type-def] :as _value}]
+  (when (= :scalar category)
+    (:specified-by type-def)))
+
 (defn introspection-schema
   "Builds an returns the introspection schema, which can be merged into the user schema."
   []
@@ -296,4 +301,5 @@
                               :interfaces resolve-interfaces
                               :of-type resolve-of-type
                               :possible-types resolve-possible-types
-                              :default-value default-value})))
+                              :default-value default-value
+                              :specified-by-url resolve-specified-by-url})))

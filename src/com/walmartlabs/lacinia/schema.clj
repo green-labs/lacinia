@@ -38,9 +38,9 @@
     [clojure.pprint :as pprint]
     [com.walmartlabs.lacinia.selection :as selection])
   (:import
-    (clojure.lang IObj PersistentQueue)
-    (java.io Writer)
-    (java.util.concurrent Executor ThreadPoolExecutor TimeUnit LinkedBlockingQueue ThreadFactory)))
+   (clojure.lang IObj PersistentQueue)
+   (java.io Writer)
+   (java.util.concurrent Executor ThreadPoolExecutor TimeUnit LinkedBlockingQueue ThreadFactory)))
 
 ;; When using Clojure 1.8, the dependency on clojure-future-spec must be included,
 ;; and this code will trigger
@@ -289,6 +289,13 @@
   ([message data]
    (merge {:message message} data)))
 
+(defn valid-url? [s]
+  (try
+    (let [uri (java.net.URI. s)]
+      (.toURL uri)
+      true)
+    (catch Exception _ false)))
+
 ;;-------------------------------------------------------------------------------
 ;; ## Validations
 
@@ -397,8 +404,10 @@
                            :var var?))
 (s/def ::parse ::parse-or-serialize-fn)
 (s/def ::serialize ::parse-or-serialize-fn)
+(s/def ::specified-by valid-url?)
 (s/def ::scalar (s/keys :opt-un [::description
-                                 ::directives]
+                                 ::directives
+                                 ::specified-by]
                   :req-un [::parse
                            ::serialize]))
 (s/def ::scalars (s/map-of ::schema-key ::scalar))
@@ -614,7 +623,7 @@
 
   (directives [_] compiled-directives))
 
-(defrecord ^:private Scalar [category type-name description parse serialize directives compiled-directives]
+(defrecord ^:private Scalar [category type-name description parse serialize directives compiled-directives specified-by]
 
   selection/TypeDef
 
@@ -1924,9 +1933,9 @@
   ;; Note: using merge, not two calls to xfer-types, since want to allow
   ;; for overrides of the built-in scalars without a name conflict exception.
   (let [merged-scalars (->> schema
-                         :scalars
-                         (merge default-scalar-transformers)
-                         (map-vals #(assoc % :category :scalar)))
+                            :scalars
+                            (merge default-scalar-transformers)
+                            (map-vals #(assoc % :category :scalar)))
         executor (or (:executor options)
                      resolve/*callback-executor*
                      (default-executor))
@@ -1939,30 +1948,30 @@
                   :subscription subscription}
          ::executor executor
          ::options options}
-      (xfer-types merged-scalars :scalar)
-      (xfer-types (:enums schema) :enum)
-      (xfer-types (:unions schema) :union)
-      (xfer-types (:objects schema) :object)
-      (xfer-types (:interfaces schema) :interface)
-      (xfer-types (:input-objects schema) :input-object)
-      (add-root query :queries (:queries schema))
-      (add-root mutation :mutations (:mutations schema))
-      (add-root subscription :subscriptions (:subscriptions schema))
-      (apply-default-subscription-resolver subscription)
-      (as-> s
-        (map-vals #(compile-type % s) s))
-      (compile-directive-defs (:directive-defs schema))
-      (prepare-and-validate-interfaces)
-      (prepare-and-validate-objects :object)
-      (prepare-and-validate-objects :input-object)
-      (validate-directives-by-category :union)
-      (validate-directives-by-category :scalar)
-      validate-enum-directives
-      inject-null-collapsers
+        (xfer-types merged-scalars :scalar)
+        (xfer-types (:enums schema) :enum)
+        (xfer-types (:unions schema) :union)
+        (xfer-types (:objects schema) :object)
+        (xfer-types (:interfaces schema) :interface)
+        (xfer-types (:input-objects schema) :input-object)
+        (add-root query :queries (:queries schema))
+        (add-root mutation :mutations (:mutations schema))
+        (add-root subscription :subscriptions (:subscriptions schema))
+        (apply-default-subscription-resolver subscription)
+        (as-> s
+              (map-vals #(compile-type % s) s))
+        (compile-directive-defs (:directive-defs schema))
+        (prepare-and-validate-interfaces)
+        (prepare-and-validate-objects :object)
+        (prepare-and-validate-objects :input-object)
+        (validate-directives-by-category :union)
+        (validate-directives-by-category :scalar)
+        validate-enum-directives
+        inject-null-collapsers
       ;; Last so that schema is as close to final and verified state as possible
-      (prepare-field-resolvers options)
-      (prepare-field-streamers options)
-      map->CompiledSchema)))
+        (prepare-field-resolvers options)
+        (prepare-field-streamers options)
+        map->CompiledSchema)))
 
 (defn default-field-resolver
   "The default for the :default-field-resolver option, this uses the field name as the key into

@@ -38,7 +38,6 @@
     [clojure.pprint :as pprint]
     [com.walmartlabs.lacinia.selection :as selection])
   (:import
-   (java.net URL)
    (clojure.lang IObj PersistentQueue)
    (java.io Writer)
    (java.util.concurrent Executor ThreadPoolExecutor TimeUnit LinkedBlockingQueue ThreadFactory)))
@@ -290,11 +289,11 @@
   ([message data]
    (merge {:message message} data)))
 
-(defn url?
-  [url]
+(defn valid-url? [s]
   (try
-    (URL. url)
-    true
+    (let [uri (java.net.URI. s)]
+      (.toURL uri)
+      true)
     (catch Exception _ false)))
 
 ;;-------------------------------------------------------------------------------
@@ -405,7 +404,7 @@
                            :var var?))
 (s/def ::parse ::parse-or-serialize-fn)
 (s/def ::serialize ::parse-or-serialize-fn)
-(s/def ::specified-by url?)
+(s/def ::specified-by valid-url?)
 (s/def ::scalar (s/keys :opt-un [::description
                                  ::directives
                                  ::specified-by]

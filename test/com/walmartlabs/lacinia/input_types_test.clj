@@ -13,7 +13,7 @@
 ; limitations under the License.
 
 (ns com.walmartlabs.lacinia.input-types-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [deftest is testing]]
             [com.walmartlabs.test-utils :refer [execute compile-schema-injected]]))
 
 (deftest mix-of-literals-and-dynamics
@@ -38,4 +38,47 @@
              {:nodes [{:color "blue"}]}}}
            (execute schema query args nil)))))
 
+(deftest one-of-input-object
+  (let [resolver (fn [_ args _]
+                   ;; TODO: arguments validation
+                   {})
+        schema (compile-schema-injected "input-object-one-of-schema.edn"
+                                        {:queries/user resolver})]
+    (testing "provide exactly one of the fields"
+      (let [query "{
+                     tom: user(by: {
+                       id: 1
+                     }) {
+                       name
+                     }
 
+                     jerry: user(by: {
+                       email: \"jerry@warnerbros.com\"
+                     }) {
+                       name
+                     }
+                   }"
+            args {}]
+       (is (= {:data
+               {:tom   {:name "Tom"}
+                :jerry {:name "Jerry"}}}
+              (execute schema query args nil)))))
+    (testing "provide two values"
+      (let [query "{
+                     user(by: {
+                       id: 1
+                       email: \"jerry@warnerbros.com\"
+                     }) {
+                       name
+                     }
+                   }"
+            args {}]
+        (is (= {:data
+                {:cars
+                 {:nodes [{:color "blue"}]}}}
+               (execute schema query args nil)))))))
+
+
+(comment
+  (require 'com.walmartlabs.lacinia.parser.schema)
+  )

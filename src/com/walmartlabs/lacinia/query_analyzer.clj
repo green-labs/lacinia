@@ -58,7 +58,8 @@
 (defn complexity-analysis
   [query]
   (let [{:keys [fragments selections]} query
-        summarized-selections (summarize-sub-selections fragments 0 selections)
+        init-depth 0
+        summarized-selections (summarize-sub-selections fragments init-depth selections)
         complexity (apply + (map calculate-complexity summarized-selections))
         max-depth (get-max-depth summarized-selections)]
     {:complexity complexity

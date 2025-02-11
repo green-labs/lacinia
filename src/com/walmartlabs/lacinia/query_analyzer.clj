@@ -8,13 +8,35 @@
 (declare summarize-selection)
 
 (defn ^:private summarize-sub-selections
-  "여러 하위 선택들을 요약합니다."
+  "여러 하위 선택들을 요약하는 함수입니다.
+     
+     파라미터:
+     - fragment-map: 프래그먼트 정의들의 맵
+     - depth: 현재 선택의 깊이 레벨
+     - sub-selections: 처리할 하위 선택들의 시퀀스
+     
+     동작:
+     1. 각 하위 선택에 현재 깊이 정보를 추가
+     2. 각 하위 선택을 summarize-selection을 통해 재귀적으로 처리
+     3. 모든 하위 선택들의 요약 정보를 하나의 시퀀스로 결합
+     
+     반환값:
+     - 모든 하위 선택들의 요약 정보가 포함된 시퀀스"
   [fragment-map depth sub-selections]
   (let [sub-selections' (map #(assoc % :depth depth) sub-selections)]
     (mapcat #(summarize-selection % fragment-map) sub-selections')))
 
 (defn ^:private summarize-selection
-  "Recursively summarizes the selection, handling field, inline fragment, and named fragment."
+  "선택을 재귀적으로 요약하며, 필드, inline fragment, named fragment를 처리합니다.
+   
+   파라미터:
+   - selection: 처리할 선택 노드
+   - fragment-map: fragment 정의들의 맵
+   
+   반환값:
+   - 필드인 경우: 필드 이름, depth, 선택 정보를 포함하는 맵의 벡터
+   - 프래그먼트인 경우: 프래그먼트 내부 선택들의 요약 정보
+   - leaf나 pageInfo인 경우: nil"
   [{:keys [arguments selections field-name leaf? fragment-name depth] :as selection} fragment-map]
   (let [selection-kind (selection/selection-kind selection)]
     (cond

@@ -68,7 +68,8 @@
   (testing "It is possible to calculate the complexity of a query in the Relay connection spec 
             by taking into account both named fragments and inline fragments."
     (is (= {:data {:node nil}
-            :extensions {:analysis {:complexity 32}}}
+            :extensions {:analysis {:complexity 32
+                                    :max-depth 4}}}
            (q "query ProductDetail($productId: ID){
                  node(id: $productId) {
                    ... on Product {
@@ -116,7 +117,8 @@
                }" {:productId "id"}))))
   (testing "If no arguments are passed in the query, the calculation uses the default value defined in the schema."
     (is (= {:data {:node nil}
-            :extensions {:analysis {:complexity 22}}}
+            :extensions {:analysis {:complexity 22
+                                    :max-depth 4}}}
            (q "query ProductDetail($productId: ID){
                  node(id: $productId) {
                    ... on Product {
@@ -160,7 +162,8 @@
                }" {:productId "id"}))))
   (testing "If return type of root query is scala, then complexity is 0"
     (is (= {:data {:root nil}
-            :extensions {:analysis {:complexity 0}}}
+            :extensions {:analysis {:complexity 0
+                                    :max-depth 0}}}
            (q "query root{
                  root
                }" nil)))))

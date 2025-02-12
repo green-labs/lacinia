@@ -36,4 +36,5 @@ jobs:
           key: cljdeps-${{ hashFiles('deps.edn') }}
 
       - name: Execute tests
-        run: clojure -T:build compile-java && clojure -X:dev:test
+        # run: clojure -T:build compile-java && clojure -X:dev:test
+        run: clojure -X:dev:test

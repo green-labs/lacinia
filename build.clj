@@ -50,7 +50,10 @@
                                  [:name "Apache License, Version 2.0"]
                                  [:url "http://www.apache.org/licenses/LICENSE-2.0"]
                                  [:distribution "repo"]]]]
-                    :description "A fork of lacinia developed and maintained by Greenlabs"})
+                    :description "A fork of lacinia developed and maintained by Greenlabs"}) 
+  (println "Copying source files...")
+  (build/copy-dir {:src-dirs ["src"]
+                   :target-dir class-dir})
   (build/jar {:class-dir class-dir
               :jar-file (format "target/%s-%s.jar" lib version)}))
 

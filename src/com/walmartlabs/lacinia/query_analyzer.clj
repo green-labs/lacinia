@@ -69,10 +69,10 @@
 
 (defn ^:private calculate-max-depth
   "selection 요약 정보에서 최대 depth를 계산합니다."
-  ([{:keys [selections]} current-depth]
-   (if (empty? selections)
-     current-depth
-     (apply max (map #(calculate-max-depth % (inc current-depth)) selections)))))
+  [{:keys [selections]} current-depth]
+  (if (empty? selections)
+    current-depth
+    (apply max (map #(calculate-max-depth % (inc current-depth)) selections))))
 
 (defn complexity-analysis
   [query]

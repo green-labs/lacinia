@@ -28,6 +28,29 @@
   [exception]
   {:errors [(as-error-map exception)]})
 
+(defn ^:private contains-defer?
+  "Recursively checks if a parsed query contains any @defer directives."
+  [parsed-query]
+  (letfn [(has-defer-in-selections? [selections]
+            (some (fn [selection]
+                    (or (:deferred? selection)
+                        (and (:selections selection)
+                             (has-defer-in-selections? (:selections selection)))))
+                  selections))]
+    (let [selections (get parsed-query :selections [])]
+      (has-defer-in-selections? selections))))
+
+(defn ^:private strip-defer-flags
+  "Recursively removes :deferred? and :defer-label flags from a parsed query."
+  [parsed-query]
+  (letfn [(strip-from-selections [selections]
+            (map (fn [selection]
+                   (cond-> (dissoc selection :deferred? :defer-label)
+                     (:selections selection)
+                     (update :selections strip-from-selections)))
+                 selections))]
+    (update parsed-query :selections strip-from-selections)))
+
 (defn execute-parsed-query-async
   "Prepares a query, by applying query variables to it, resulting in a prepared
   query which is then executed.
@@ -48,15 +71,15 @@
                                    [(parser/prepare-with-query-variables parsed-query variables)]
                                    (catch Exception e
                                      [nil (as-errors e)]))]
-  
+
    (some? error-result)
    (resolve/resolve-as error-result)
-  
+
    :let [validation-errors (validator/validate prepared)]
-  
+
    (seq validation-errors)
    (resolve/resolve-as {:errors validation-errors})
-  
+
    :else (executor/execute-query (assoc context constants/parsed-query-key prepared
                                         ::tracing/validation {:start-offset start-offset
                                                               :duration (tracing/duration start-nanos)}))))
@@ -73,12 +96,20 @@
    (execute-parsed-query parsed-query variables context nil))
   ([parsed-query variables context options]
    (let [*result (promise)
-         {:keys [timeout-ms timeout-error]
+         {:keys [timeout-ms timeout-error prepared-override]
           :or {timeout-ms 0
                timeout-error {:message "Query execution timed out."}}} options
          context' (cond-> context
-                   (:analyze-query options) query-analyzer/enable-query-analyzer)
-         execution-result (execute-parsed-query-async parsed-query variables context')
+                    (:analyze-query options) query-analyzer/enable-query-analyzer)
+         ;; Use prepared-override if provided, otherwise prepare normally
+         execution-result (if prepared-override
+                            ;; When using prepared-override, still need to validate
+                            (let [validation-errors (validator/validate prepared-override)]
+                              (if (seq validation-errors)
+                                (resolve/resolve-as {:errors validation-errors})
+                                (executor/execute-query (assoc context' constants/parsed-query-key prepared-override
+                                                               ::tracing/validation {:start-offset 0 :duration 0}))))
+                            (execute-parsed-query-async parsed-query variables context'))
          result (do
                   (resolve/on-deliver! execution-result *result)
                   ;; Block on that deliver, then return the final result.
@@ -100,6 +131,11 @@
 
   In the case where there's a parse or validation problem for the query,
   just the :errors key will be present.
+
+  When a query contains @defer directives, the behavior depends on the :stream-defer option:
+  - :stream-defer true: Returns {:initial-result ResolverResult, :deferred-stream Channel}
+  - :stream-defer false: Ignores @defer directives and executes synchronously
+  - :stream-defer :auto (default): Auto-detects @defer and streams if present, otherwise synchronous
 
   schema
   : GraphQL schema (as compiled by [[com.walmartlabs.lacinia.schema/compile]]).
@@ -129,6 +165,12 @@
   : Error map used if a timeout occurs.
   : Default is `{:message \"Query execution timed out.\"}`.
 
+  :stream-defer
+  : Controls @defer directive handling. Values:
+    - :auto (default): Auto-detect @defer and stream if present
+    - true: Force streaming mode (returns {:initial-result, :deferred-stream})
+    - false: Ignore @defer directives, execute synchronously
+
   This function parses the query and invokes [[execute-parsed-query]].
 
   When a GraphQL query contains variables, the values for those variables
@@ -147,11 +189,79 @@
    (execute schema query variables context {}))
   ([schema query variables context options]
    {:pre [(string? query)]}
-   (let [{:keys [operation-name]} options
+   (let [{:keys [operation-name stream-defer]
+          :or {stream-defer :auto}} options
          [parsed error-result] (try
                                  [(parser/parse-query schema query operation-name)]
                                  (catch ExceptionInfo e
                                    [nil (as-errors e)]))]
      (if (some? error-result)
        error-result
-       (execute-parsed-query parsed variables context options)))))
+       (let [;; Need to prepare the query to check for defer since @defer is processed during preparation
+             [prepared prepare-error] (try
+                                        [(parser/prepare-with-query-variables parsed variables)]
+                                        (catch Exception e
+                                          [nil (as-errors e)]))
+             should-stream? (if prepare-error
+                              false ; If preparation failed, can't stream
+                              (case stream-defer
+                                true true
+                                false false
+                                :auto (contains-defer? prepared)
+                                (contains-defer? prepared)))]
+         (if prepare-error
+           prepare-error
+           (if should-stream?
+             ;; Use defer streaming execution
+             (let [context' (assoc context constants/schema-key schema
+                                   constants/parsed-query-key parsed)
+                   validation-errors (validator/validate prepared)]
+               (if (seq validation-errors)
+                 {:initial-result (resolve/resolve-as {:errors validation-errors})
+                  :deferred-stream nil}
+                 (executor/execute-query-with-defer (assoc context' constants/parsed-query-key prepared))))
+             ;; Use traditional synchronous execution - strip defer flags to ignore @defer
+             (let [prepared-for-sync (if (= stream-defer false)
+                                       (strip-defer-flags prepared)
+                                       prepared)]
+               (execute-parsed-query parsed variables context (assoc options :prepared-override prepared-for-sync))))))))))
+
+(defn execute-with-defer
+  "Execute a GraphQL query with true @defer streaming support.
+
+  DEPRECATED: Use `execute` with `:stream-defer true` option instead.
+  This function is maintained for backward compatibility and will be removed in a future version.
+
+  This function supports the @defer directive by returning results in two parts:
+  1. An initial response with deferred fields as placeholders
+  2. A stream of subsequent responses containing the deferred field values
+
+  Arguments:
+  - compiled-schema: A compiled schema (from schema/compile)
+  - query-string: The GraphQL query string  
+  - variables: A map of variable values (optional)
+  - context: Additional context map (optional)
+
+  Returns a map with:
+  - :initial-result - A ResolverResult that delivers the initial response
+  - :deferred-stream - A core.async channel that streams deferred results
+
+  Example usage:
+    (let [{:keys [initial-result deferred-stream]} 
+          (execute-with-defer schema query variables context)
+          initial @initial-result]
+      (println \"Initial:\" initial)
+      (async/go-loop []
+        (when-let [deferred (async/<! deferred-stream)]
+          (println \"Deferred:\" deferred)
+          (recur))))
+
+  The initial response will include :hasNext true if there are deferred fields.
+  Each deferred result follows the GraphQL spec format with :incremental and :hasNext."
+  {:deprecated "Use execute with :stream-defer true option instead"}
+  ([compiled-schema query-string]
+   (execute compiled-schema query-string nil nil {:stream-defer true}))
+  ([compiled-schema query-string variables-map]
+   (execute compiled-schema query-string variables-map nil {:stream-defer true}))
+  ([compiled-schema query-string variables-map context]
+   (execute compiled-schema query-string variables-map context {:stream-defer true})))

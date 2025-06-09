@@ -27,7 +27,8 @@
    [com.walmartlabs.lacinia.tracing :as tracing]
    [com.walmartlabs.lacinia.constants :as constants]
    [com.walmartlabs.lacinia.selection :as selection]
-   [com.walmartlabs.lacinia.query-analyzer :as query-analyzer])
+   [com.walmartlabs.lacinia.query-analyzer :as query-analyzer]
+   [clojure.core.async :as async])
   (:import (clojure.lang PersistentQueue)
            (java.util.concurrent Executor)))
 
@@ -383,32 +384,46 @@
            selection (:value value))
     [execution-context value]))
 
-(defn ^:private process-deferred-selections
-  "Processes deferred selections and returns a sequence of deferred results."
-  [execution-context]
+;; Legacy process-deferred-selections function removed
+;; Deferred processing is now handled by stream-deferred-selections
+;; for true streaming support via execute-query-with-defer
+
+(defn ^:private stream-deferred-selections
+  "Processes deferred selections and streams results to a channel as they resolve."
+  [execution-context deferred-channel]
   (let [deferred-selections @(:*deferred-selections execution-context)]
-    (when (seq deferred-selections)
-      ;; For now, return a simple synchronous processing
-      ;; In a real implementation, this would be asynchronous
-      (mapv (fn [{:keys [selection path container-type container-value defer-label]}]
-              (let [;; Create a new selection without the deferred flag
-                    non-deferred-selection (dissoc selection :deferred? :defer-label)
-                    ;; Execute the selection normally
-                    result (apply-field-selection execution-context non-deferred-selection
-                                                  (butlast path) container-type container-value)
-                    ;; Create a promise to hold the resolved value
-                    result-promise (promise)]
-                ;; Use on-deliver! to get the resolved value
-                (resolve/on-deliver! result
-                                     (fn [resolved-value]
-                                       (deliver result-promise
-                                                (if (su/is-result-tuple? resolved-value)
-                                                  (:value resolved-value)
-                                                  resolved-value))))
-                {:path path
-                 :data @result-promise
-                 :label defer-label}))
-            deferred-selections))))
+    (if (empty? deferred-selections)
+      (async/close! deferred-channel)
+      (let [total-count (count deferred-selections)
+            *completed-count (atom 0)]
+
+        ;; Process each deferred selection asynchronously
+        (doseq [{:keys [selection path container-type container-value defer-label]} deferred-selections]
+          (let [;; Create a new selection without the deferred flag
+                non-deferred-selection (dissoc selection :deferred? :defer-label)
+                ;; Execute the selection normally
+                result (apply-field-selection execution-context non-deferred-selection
+                                              (butlast path) container-type container-value)]
+
+            ;; Use on-deliver! to get the resolved value asynchronously
+            (resolve/on-deliver! result
+                                 (fn [resolved-value]
+                                   (let [final-value (if (su/is-result-tuple? resolved-value)
+                                                       (:value resolved-value)
+                                                       resolved-value)
+                                         completed (swap! *completed-count inc)
+                                         is-last? (= completed total-count)
+                                         deferred-result {:incremental [{:data final-value
+                                                                         :path path
+                                                                         :label defer-label}]
+                                                          :hasNext (not is-last?)}]
+
+                                     ;; Send the deferred result to the channel
+                                     (async/>!! deferred-channel deferred-result)
+
+                                     ;; Close channel when all deferred results are complete
+                                     (when is-last?
+                                       (async/close! deferred-channel)))))))))))
 
 (defn execute-query
   "Entrypoint for execution of a query.
@@ -416,6 +431,9 @@
   Expects the context to contain the schema and parsed query.
 
   Returns a ResolverResult that will deliver the result map.
+
+  Note: This function does NOT support @defer directive streaming.
+  For @defer support, use execute-query-with-defer instead.
 
   This should generally not be invoked by user code; see [[execute-parsed-query]]."
   [context]
@@ -457,24 +475,101 @@
                                            (let [errors (seq @*errors)
                                                  warnings (seq @*warnings)
                                                  extensions @*extensions
-                                                 deferred-results (process-deferred-selections execution-context')]
-                                             (resolve/deliver! result-promise
-                                                               (cond-> {:data (schema/collapse-nulls-in-map selected-data)}
-                                                                 (seq extensions) (assoc :extensions extensions)
-                                                                 (seq deferred-results) (assoc :deferred deferred-results)
-                                                                 *resolver-tracing
-                                                                 (tracing/inject-tracing timing-start
-                                                                                         (::tracing/parsing parsed-query)
-                                                                                         (::tracing/validation context)
-                                                                                         @*resolver-tracing)
-                                                                 errors (assoc :errors (distinct errors))
-                                                                 warnings (assoc-in [:extensions :warnings] (distinct warnings))))))))
+                                                 final-result (cond-> {:data (schema/collapse-nulls-in-map selected-data)}
+                                                                (seq extensions) (assoc :extensions extensions)
+                                                                *resolver-tracing
+                                                                (tracing/inject-tracing timing-start
+                                                                                        (::tracing/parsing parsed-query)
+                                                                                        (::tracing/validation context)
+                                                                                        @*resolver-tracing)
+                                                                errors (assoc :errors (distinct errors))
+                                                                warnings (assoc-in [:extensions :warnings] (distinct warnings)))]
+                                             (resolve/deliver! result-promise final-result)))))
                   (catch Throwable t
                     (resolve/deliver! result-promise t))))]
         ;; Execute in the background
         (.execute executor f)
         ;; And return a promise
         result-promise))))
+
+(defn execute-query-with-defer
+  "Entrypoint for execution of a query with true @defer streaming support.
+
+  Returns a map with:
+  - :initial-result - ResolverResult that delivers the initial response with deferred placeholders
+  - :deferred-stream - core.async channel that delivers deferred results as they resolve
+
+  This enables true streaming where the initial response is returned immediately,
+  and subsequent deferred results are streamed as they become available."
+  [context]
+  (let [parsed-query (get context constants/parsed-query-key)
+        {:keys [selections operation-type ::tracing/timing-start]} parsed-query
+        schema (get parsed-query constants/schema-key)
+        ^Executor executor (::schema/executor schema)]
+    (binding [resolve/*callback-executor* executor]
+      (let [enabled-selections (remove :disabled? selections)
+            *errors (atom [])
+            *warnings (atom [])
+            *extensions (if (::query-analyzer/enable? context)
+                          (atom {:analysis (query-analyzer/complexity-analysis parsed-query)})
+                          (atom {}))
+            *resolver-tracing (when (::tracing/enabled? context)
+                                (atom []))
+            context' (assoc context constants/schema-key schema)
+            root-type (get-nested parsed-query [:root :type-name])
+            root-value (::resolved-value context)
+            execution-context (map->ExecutionContext {:context context'
+                                                      :schema schema
+                                                      :*errors *errors
+                                                      :*warnings *warnings
+                                                      :*resolver-tracing *resolver-tracing
+                                                      :*deferred-selections (atom [])
+                                                      :timing-start timing-start
+                                                      :*extensions *extensions})
+            [execution-context' root-value'] (unwrap-root-value execution-context (first selections) root-value)
+            initial-result-promise (resolve-promise)
+
+            ;; Create a channel for streaming deferred results
+            deferred-channel (async/chan)
+
+            f (bound-fn []
+                (try
+                  (let [execute-fn (if (= :mutation operation-type) execute-nested-selections-sync execute-nested-selections)
+                        operation-result (execute-fn execution-context' enabled-selections [] nil root-type root-value')]
+                    (resolve/on-deliver! operation-result
+                                         (fn [selected-data]
+                                           (let [errors (seq @*errors)
+                                                 warnings (seq @*warnings)
+                                                 extensions @*extensions
+                                                 has-deferred? (seq @(:*deferred-selections execution-context'))
+                                                 initial-response (cond-> {:data (schema/collapse-nulls-in-map selected-data)}
+                                                                    (seq extensions) (assoc :extensions extensions)
+                                                                    *resolver-tracing
+                                                                    (tracing/inject-tracing timing-start
+                                                                                            (::tracing/parsing parsed-query)
+                                                                                            (::tracing/validation context)
+                                                                                            @*resolver-tracing)
+                                                                    errors (assoc :errors (distinct errors))
+                                                                    warnings (assoc-in [:extensions :warnings] (distinct warnings))
+                                                                    has-deferred? (assoc :hasNext true))]
+
+                                             ;; Deliver initial response immediately
+                                             (resolve/deliver! initial-result-promise initial-response)
+
+                                             ;; Process deferred selections and stream results
+                                             (if has-deferred?
+                                               (stream-deferred-selections execution-context' deferred-channel)
+                                               (async/close! deferred-channel))))))
+                  (catch Throwable t
+                    (resolve/deliver! initial-result-promise t)
+                    (async/close! deferred-channel))))]
+
+        ;; Execute in the background
+        (.execute executor f)
+
+        ;; Return both initial result and deferred stream
+        {:initial-result initial-result-promise
+         :deferred-stream deferred-channel}))))
 
 (defn invoke-streamer
   "Given a parsed and prepared query (inside the context, as with [[execute-query]]),

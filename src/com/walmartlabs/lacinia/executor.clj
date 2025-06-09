@@ -44,27 +44,27 @@
   field of the concrete type is used as the source for the field resolver."
   [schema field-selection container-type container-value]
   (cond-let
-    (:concrete-type? field-selection)
-    (-> field-selection :field-definition :resolve)
+   (:concrete-type? field-selection)
+   (-> field-selection :field-definition :resolve)
 
-    :let [field-name (get-nested field-selection [:field-definition :field-name])]
+   :let [field-name (get-nested field-selection [:field-definition :field-name])]
 
-    (nil? container-type)
-    (throw (ex-info "Sanity check: value type tag is nil on abstract type."
-                    {:value container-value}))
+   (nil? container-type)
+   (throw (ex-info "Sanity check: value type tag is nil on abstract type."
+                   {:value container-value}))
 
-    :let [type (get schema container-type)]
+   :let [type (get schema container-type)]
 
-    (nil? type)
-    (throw (ex-info "Sanity check: invalid type tag on value."
-                    {:type-name container-type
-                     :value container-value}))
+   (nil? type)
+   (throw (ex-info "Sanity check: invalid type tag on value."
+                   {:type-name container-type
+                    :value container-value}))
 
-    :else
-    (or (get-nested type [:fields field-name :resolve])
-        (throw (ex-info "Sanity check: field not present."
-                        {:type container-type
-                         :value container-value})))))
+   :else
+   (or (get-nested type [:fields field-name :resolve])
+       (throw (ex-info "Sanity check: field not present."
+                       {:type container-type
+                        :value container-value})))))
 
 (defn ^:private invoke-resolver-for-field
   "Resolves the value for a field selection node.
@@ -130,8 +130,9 @@
   ;; *resolver-tracing is usually nil, or may be an Atom containing an empty map, which
   ;; accumulates timing data during execution.
   ;; *extensions is an Atom containing a map; if non-empty, it is added to the result map as :extensions
+  ;; *deferred-selections is an Atom containing a vector of deferred field selections
   ;; schema is the compiled schema (obtained from the parsed query)
-  [context *errors *warnings *extensions *resolver-tracing timing-start schema])
+           [context *errors *warnings *extensions *resolver-tracing *deferred-selections timing-start schema])
 
 (defn ^:private apply-field-selection
   [execution-context field-selection path container-type container-value]
@@ -157,11 +158,11 @@
   (let [{:keys [fragment-name]} named-fragment-selection
         fragment-def (get-nested execution-context [:context constants/parsed-query-key :fragments fragment-name])]
     (maybe-apply-fragment
-      execution-context
+     execution-context
       ;; A bit of a hack:
-      (assoc named-fragment-selection :selections (:selections fragment-def))
-      (:concrete-types fragment-def)
-      path container-type container-value)))
+     (assoc named-fragment-selection :selections (:selections fragment-def))
+     (:concrete-types fragment-def)
+     path container-type container-value)))
 
 (defn ^:private apply-selection
   "Applies a selection to the current container-value.
@@ -169,13 +170,27 @@
   Returns a ResolverResult that delivers a selected value (usually, a ResultTuple), or may return nil."
   [execution-context selection path container-type container-value]
   (when-not
-    (:disabled? selection)
-    (case (selection/selection-kind selection)
-      :field (apply-field-selection execution-context selection path container-type container-value)
+   (:disabled? selection)
+    (if (:deferred? selection)
+      ;; For deferred selections, collect them for later processing
+      (let [alias (selection/alias-name selection)
+            defer-label (:defer-label selection)]
+        (swap! (:*deferred-selections execution-context)
+               conj {:selection selection
+                     :path (conj path alias)
+                     :container-type container-type
+                     :container-value container-value
+                     :defer-label defer-label})
+        ;; Return a placeholder for the deferred field
+        ;; Return a placeholder for the deferred field
+        (resolve-as (su/->ResultTuple alias ::deferred)))
+      ;; Normal processing for non-deferred selections
+      (case (selection/selection-kind selection)
+        :field (apply-field-selection execution-context selection path container-type container-value)
 
-      :inline-fragment (apply-inline-fragment execution-context selection path container-type container-value)
+        :inline-fragment (apply-inline-fragment execution-context selection path container-type container-value)
 
-      :named-fragment (apply-named-fragment execution-context selection path container-type container-value))))
+        :named-fragment (apply-named-fragment execution-context selection path container-type container-value)))))
 
 (defn ^:private merge-selected-values
   "Merges the left and right values, with a special case for when the right value
@@ -262,7 +277,7 @@
           (reset! *pass-through-exceptions true)
           (cond
             (and (or (some? resolved-value)
-                     (= [] path))                           ;; This covers the root operation
+                     (= [] path)) ;; This covers the root operation
                  resolved-type
                  (seq sub-selections))
             ;; Case #1: The field is an object type that needs further sub-selections to reach
@@ -368,6 +383,33 @@
            selection (:value value))
     [execution-context value]))
 
+(defn ^:private process-deferred-selections
+  "Processes deferred selections and returns a sequence of deferred results."
+  [execution-context]
+  (let [deferred-selections @(:*deferred-selections execution-context)]
+    (when (seq deferred-selections)
+      ;; For now, return a simple synchronous processing
+      ;; In a real implementation, this would be asynchronous
+      (mapv (fn [{:keys [selection path container-type container-value defer-label]}]
+              (let [;; Create a new selection without the deferred flag
+                    non-deferred-selection (dissoc selection :deferred? :defer-label)
+                    ;; Execute the selection normally
+                    result (apply-field-selection execution-context non-deferred-selection
+                                                  (butlast path) container-type container-value)
+                    ;; Create a promise to hold the resolved value
+                    result-promise (promise)]
+                ;; Use on-deliver! to get the resolved value
+                (resolve/on-deliver! result
+                                     (fn [resolved-value]
+                                       (deliver result-promise
+                                                (if (su/is-result-tuple? resolved-value)
+                                                  (:value resolved-value)
+                                                  resolved-value))))
+                {:path path
+                 :data @result-promise
+                 :label defer-label}))
+            deferred-selections))))
+
 (defn execute-query
   "Entrypoint for execution of a query.
 
@@ -401,6 +443,7 @@
                                                       :*errors *errors
                                                       :*warnings *warnings
                                                       :*resolver-tracing *resolver-tracing
+                                                      :*deferred-selections (atom [])
                                                       :timing-start timing-start
                                                       :*extensions *extensions})
             [execution-context' root-value'] (unwrap-root-value execution-context (first selections) root-value)
@@ -413,10 +456,12 @@
                                          (fn [selected-data]
                                            (let [errors (seq @*errors)
                                                  warnings (seq @*warnings)
-                                                 extensions @*extensions]
+                                                 extensions @*extensions
+                                                 deferred-results (process-deferred-selections execution-context')]
                                              (resolve/deliver! result-promise
                                                                (cond-> {:data (schema/collapse-nulls-in-map selected-data)}
                                                                  (seq extensions) (assoc :extensions extensions)
+                                                                 (seq deferred-results) (assoc :deferred deferred-results)
                                                                  *resolver-tracing
                                                                  (tracing/inject-tracing timing-start
                                                                                          (::tracing/parsing parsed-query)

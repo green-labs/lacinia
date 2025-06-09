@@ -17,22 +17,22 @@
 
   Also provides functions that operate on the parsed query."
   (:require
-    [clojure.string :as str]
-    [com.walmartlabs.lacinia.internal-utils
-     :refer [cond-let update? q map-vals filter-vals remove-vals
-             with-exception-context throw-exception to-message seek
-             keepv as-keyword *exception-context* get-nested]]
-    [com.walmartlabs.lacinia.select-utils :as su]
-    [com.walmartlabs.lacinia.schema :as schema]
-    [com.walmartlabs.lacinia.constants :as constants]
-    [com.walmartlabs.lacinia.resolve :as resolve]
-    [com.walmartlabs.lacinia.parser.query :as qp]
-    [com.walmartlabs.lacinia.tracing :as tracing]
-    [com.walmartlabs.lacinia.selection :as selection]
-    [com.walmartlabs.lacinia.describe :refer [Describe]]
-    [flatland.ordered.map :refer [ordered-map]])
+   [clojure.string :as str]
+   [com.walmartlabs.lacinia.internal-utils
+    :refer [cond-let update? q map-vals filter-vals remove-vals
+            with-exception-context throw-exception to-message seek
+            keepv as-keyword *exception-context* get-nested]]
+   [com.walmartlabs.lacinia.select-utils :as su]
+   [com.walmartlabs.lacinia.schema :as schema]
+   [com.walmartlabs.lacinia.constants :as constants]
+   [com.walmartlabs.lacinia.resolve :as resolve]
+   [com.walmartlabs.lacinia.parser.query :as qp]
+   [com.walmartlabs.lacinia.tracing :as tracing]
+   [com.walmartlabs.lacinia.selection :as selection]
+   [com.walmartlabs.lacinia.describe :refer [Describe]]
+   [flatland.ordered.map :refer [ordered-map]])
   (:import
-    (clojure.lang ExceptionInfo)))
+   (clojure.lang ExceptionInfo)))
 
 (declare ^:private selection)
 
@@ -61,7 +61,9 @@
 (def ^:private builtin-directives
   (let [if-arg {:if {:type {:kind :non-null
                             :type {:kind :root
-                                   :type :Boolean}}}}]
+                                   :type :Boolean}}}}
+        label-arg {:label {:type {:kind :root
+                                  :type :String}}}]
     {:skip {:args if-arg
             :effector (fn [node arguments]
                         (cond-> node
@@ -69,7 +71,11 @@
      :include {:args if-arg
                :effector (fn [node arguments]
                            (cond-> node
-                             (-> arguments :if false?) (assoc :disabled? true)))}}))
+                             (-> arguments :if false?) (assoc :disabled? true)))}
+     :defer {:args label-arg
+             :effector (fn [node arguments]
+                         (assoc node :deferred? true
+                                :defer-label (:label arguments)))}}))
 
 (declare ^:private build-map-from-parsed-arguments)
 
@@ -186,7 +192,7 @@
                    dynamics)))))))
 
 (defn ^:private collect-default-values
-  [field-map]                                               ; also works with arguments
+  [field-map] ; also works with arguments
   (let [defaults (->> field-map
                       (map-vals :default-value)
                       (filter-vals some?))]
@@ -247,33 +253,33 @@
                          {:category (:category scalar-type)}))
 
       (cond-let
-        (nil? arg-value)
-        nil
+       (nil? arg-value)
+       nil
 
-        :let [parser (:parse scalar-type)
-              coerced (try
-                        (parser arg-value)
-                        (catch Throwable t
-                          (schema/coercion-failure (to-message t) (ex-data t))))]
+       :let [parser (:parse scalar-type)
+             coerced (try
+                       (parser arg-value)
+                       (catch Throwable t
+                         (schema/coercion-failure (to-message t) (ex-data t))))]
 
         ;; The parser callback can return nil if it fails to perform the conversion
         ;; and get a generic message, or return a coercion-failure with more details.
 
-        (nil? coerced)
-        (throw-exception (format "Unable to convert %s to scalar type %s."
-                                 (pr-str arg-value)
-                                 (q type-name))
-                         {:value arg-value
-                          :type-name type-name})
+       (nil? coerced)
+       (throw-exception (format "Unable to convert %s to scalar type %s."
+                                (pr-str arg-value)
+                                (q type-name))
+                        {:value arg-value
+                         :type-name type-name})
 
-        (schema/is-coercion-failure? coerced)
-        (throw-exception (format "Scalar value is not parsable as type %s: %s"
-                                 (q type-name)
-                                 (:message coerced))
-                         (dissoc coerced :message))
+       (schema/is-coercion-failure? coerced)
+       (throw-exception (format "Scalar value is not parsable as type %s: %s"
+                                (q type-name)
+                                (:message coerced))
+                        (dissoc coerced :message))
 
-        :else
-        coerced))))
+       :else
+       coerced))))
 
 (defmethod process-literal-argument :null
   [_schema argument-definition _argument]
@@ -486,69 +492,69 @@
 (defn ^:private construct-literal-argument
   [schema result argument-type arg-value]
   (cond-let
-    :let [nested-type (:type argument-type)
-          kind (:kind argument-type)]
+   :let [nested-type (:type argument-type)
+         kind (:kind argument-type)]
 
     ;; we can only hit this if we iterate over list members
-    (and (nil? result) (= :non-null kind))
-    (throw-exception (format "Variable %s contains null members but supplies the value for a list that can't have any null members."
-                             (q arg-value))
-                     {:variable-name arg-value})
+   (and (nil? result) (= :non-null kind))
+   (throw-exception (format "Variable %s contains null members but supplies the value for a list that can't have any null members."
+                            (q arg-value))
+                    {:variable-name arg-value})
 
-    (= :list kind)
-    (cond
-      (and (= :list (:kind nested-type))
-           (not (sequential? (first result))))
-      (throw-exception (format "Variable %s doesn't contain the correct number of (nested) lists."
-                               (q arg-value))
-                       {:variable-name arg-value})
+   (= :list kind)
+   (cond
+     (and (= :list (:kind nested-type))
+          (not (sequential? (first result))))
+     (throw-exception (format "Variable %s doesn't contain the correct number of (nested) lists."
+                              (q arg-value))
+                      {:variable-name arg-value})
 
       ;; variables of a list type allow for a single value input
-      (and (some? result)
-           (not (sequential? result)))
-      [:array (mapv #(construct-literal-argument schema % nested-type arg-value) [result])]
+     (and (some? result)
+          (not (sequential? result)))
+     [:array (mapv #(construct-literal-argument schema % nested-type arg-value) [result])]
 
-      :else
-      [:array (mapv #(construct-literal-argument schema % nested-type arg-value) result)])
+     :else
+     [:array (mapv #(construct-literal-argument schema % nested-type arg-value) result)])
 
-    (nil? result)
-    [:null nil]
+   (nil? result)
+   [:null nil]
 
-    (map? nested-type)
-    (recur schema result nested-type arg-value)
+   (map? nested-type)
+   (recur schema result nested-type arg-value)
 
-    :let [category (get-nested schema [nested-type :category])]
+   :let [category (get-nested schema [nested-type :category])]
 
-    (= category :scalar)
-    [:scalar result]
+   (= category :scalar)
+   [:scalar result]
 
     ;; enums have to be handled carefully because they are likely strings in
     ;; the variable map.
 
-    (= category :enum)
-    [:enum (as-keyword result)]
+   (= category :enum)
+   [:enum (as-keyword result)]
 
-    (= category :input-object)
-    [:object (if-not (map? result)
-               (throw-exception (format "Invalid value for input object %s."
-                                        (q nested-type))
-                                {:input-object-type nested-type
-                                 :value result})
-               (let [object-fields (get-nested schema [nested-type :fields])]
-                 (reduce (fn [acc k]
-                           (let [v (get result k)
-                                 field-type (get object-fields k)]
-                             (when-not (contains? object-fields k)
-                               (throw-exception "Field not defined for input object."
-                                                {:field-name k
-                                                 :input-object-type nested-type
-                                                 :input-object-fields (-> object-fields keys sort vec)}))
-                             (assoc acc k (construct-literal-argument schema v field-type arg-value))))
-                         {}
-                         (keys result))))]
+   (= category :input-object)
+   [:object (if-not (map? result)
+              (throw-exception (format "Invalid value for input object %s."
+                                       (q nested-type))
+                               {:input-object-type nested-type
+                                :value result})
+              (let [object-fields (get-nested schema [nested-type :fields])]
+                (reduce (fn [acc k]
+                          (let [v (get result k)
+                                field-type (get object-fields k)]
+                            (when-not (contains? object-fields k)
+                              (throw-exception "Field not defined for input object."
+                                               {:field-name k
+                                                :input-object-type nested-type
+                                                :input-object-fields (-> object-fields keys sort vec)}))
+                            (assoc acc k (construct-literal-argument schema v field-type arg-value))))
+                        {}
+                        (keys result))))]
 
-    :else
-    (throw (IllegalStateException. "Sanity check - no option in construct-literal-argument."))))
+   :else
+   (throw (IllegalStateException. "Sanity check - no option in construct-literal-argument."))))
 
 (defn ^:private substitute-variable
   "Checks result against variable kind, iterates over nested types, and applies respective
@@ -581,50 +587,50 @@
       (fn [variables]
         (with-exception-context captured-context
           (cond-let
-            :let [result (get variables arg-value)]
+           :let [result (get variables arg-value)]
 
             ;; So, when a client provides variables, sometimes you get a string
             ;; when you expect a keyword for an enum. Can't help that, when the value
             ;; comes from a variable, there's no mechanism until we reach right here to convert it
             ;; to a keyword.
 
-            (some? result)
-            (substitute-variable schema result (:type argument-definition) arg-value)
+           (some? result)
+           (substitute-variable schema result (:type argument-definition) arg-value)
 
-            :let [supplied? (contains? variables arg-value)]
+           :let [supplied? (contains? variables arg-value)]
 
-            (and (not supplied?)
-                 var-has-default?)
+           (and (not supplied?)
+                var-has-default?)
             ;; There might just be an issue when the default is explicitly nil
-            var-default
+           var-default
 
             ;; Either the variable was not specified OR an explicit null was specified
-            var-non-nullable?
-            (throw-exception (format "No value was provided for variable %s, which is non-nullable."
-                                     (q arg-value))
-                             {:variable-name arg-value})
+           var-non-nullable?
+           (throw-exception (format "No value was provided for variable %s, which is non-nullable."
+                                    (q arg-value))
+                            {:variable-name arg-value})
 
             ;; An explicit nil was supplied for the variable, which may be a problem if the
             ;; argument doesn't accept nulls.
-            supplied?
-            (when arg-non-nullable?
-              (throw-exception (format "Argument %s is required, but no value was provided."
-                                       (q arg-value))))
+           supplied?
+           (when arg-non-nullable?
+             (throw-exception (format "Argument %s is required, but no value was provided."
+                                      (q arg-value))))
 
-            (:has-default-value? argument-definition)
-            (:default-value argument-definition)
+           (:has-default-value? argument-definition)
+           (:default-value argument-definition)
 
-            arg-non-nullable?
-            (throw-exception (format "No variable %s was supplied for argument %s, which is required."
-                                     (q arg-value)
-                                     (-> argument-definition :qualified-name q))
-                             {:variable-name arg-value})
+           arg-non-nullable?
+           (throw-exception (format "No variable %s was supplied for argument %s, which is required."
+                                    (q arg-value)
+                                    (-> argument-definition :qualified-name q))
+                            {:variable-name arg-value})
 
             ;; No value or default is supplied (or needed); the resolver will simply not
             ;; see the argument in its argument map. It can decide what to do.
 
-            :else
-            ::omit-argument))))))
+           :else
+           ::omit-argument))))))
 
 (declare ^:private process-arguments)
 
@@ -778,9 +784,9 @@
                                              e)))]
                     (-> parsed-directive
                         (assoc
-                          :effector (:effector directive-def)
-                          :arguments literal-arguments
-                          :arguments-extractor dynamic-arguments-extractor)
+                         :effector (:effector directive-def)
+                         :arguments literal-arguments
+                         :arguments-extractor dynamic-arguments-extractor)
                         map->Directive))
                   (throw-exception (format "Unknown directive %s."
                                            (q directive-name)
@@ -792,18 +798,18 @@
   "A psuedo field definition that exists to act as a placeholder when the
   __typename metafield is encountered."
   (schema/map->FieldDef
-    {:type (schema/expand-type '(non-null String))
+   {:type (schema/expand-type '(non-null String))
 
-     :field-name :__typename
+    :field-name :__typename
 
-     :null-collapser identity
+    :null-collapser identity
 
-     :resolve (fn [context _ _]
-                (-> context
-                    :com.walmartlabs.lacinia/container-type-name
-                    resolve/resolve-as))
+    :resolve (fn [context _ _]
+               (-> context
+                   :com.walmartlabs.lacinia/container-type-name
+                   resolve/resolve-as))
 
-     :selector schema/floor-selector}))
+    :selector schema/floor-selector}))
 
 (defrecord ^:private FieldSelection [field-definition leaf? concrete-type? reportable-arguments
                                      alias field-name qualified-name selections directives arguments
@@ -891,33 +897,33 @@
   might be nil), retrieve the requested operation definition from the document."
   [operations operation-name]
   (cond-let
-    :let [operation-key (when-not (str/blank? operation-name)
-                          (as-keyword operation-name))
-          operation-count (count operations)
-          single-op? (= 1 operation-count)
-          first-op (first operations)]
+   :let [operation-key (when-not (str/blank? operation-name)
+                         (as-keyword operation-name))
+         operation-count (count operations)
+         single-op? (= 1 operation-count)
+         first-op (first operations)]
 
-    (and single-op?
-         operation-key
-         (not= operation-key (:name first-op)))
+   (and single-op?
+        operation-key
+        (not= operation-key (:name first-op)))
 
-    (throw-exception "Single operation did not provide a matching name."
-                     {:op-name operation-name})
+   (throw-exception "Single operation did not provide a matching name."
+                    {:op-name operation-name})
 
-    single-op?
-    first-op
+   single-op?
+   first-op
 
-    :let [operation (seek #(= operation-key (:name %)) operations)]
+   :let [operation (seek #(= operation-key (:name %)) operations)]
 
-    (nil? operation)
-    (throw-exception "Multiple operations provided but no matching name found."
-                     {:op-count operation-count
-                      :operation-name operation-name})
+   (nil? operation)
+   (throw-exception "Multiple operations provided but no matching name found."
+                    {:op-count operation-count
+                     :operation-name operation-name})
 
     ;; TODO: Check the spec, seems like if there are multiple operations, they
     ;; should all be named with unique names.
 
-    :else operation))
+   :else operation))
 
 (def ^:private prepare-keys
   "Seq of keys associated with prepare phase operations."
@@ -1022,8 +1028,8 @@
     (-> first-selection
         (assoc :selections combined-selections)
         (cond->
-          (seq prepare-values) (-> (merge prepare-values)
-                                   (assoc ::needs-prepare? true))))))
+         (seq prepare-values) (-> (merge prepare-values)
+                                  (assoc ::needs-prepare? true))))))
 
 (defn ^:private coalesce-selections
   "It is possible to select the same field more than once, and then identify different
@@ -1046,19 +1052,19 @@
   and handle marking the node for any necessary prepare phase operations."
   [schema m type]
   (mark-node-for-prepare
-    (if-let [sub-selections (-> m :selections seq)]
-      (let [selections' (->> sub-selections
-                             (mapv #(selection schema % type))
-                             coalesce-selections)
-            all-nested-fragments (keepv :nested-fragments selections')
-            nested-fragments' (when (seq all-nested-fragments)
-                                (reduce into
-                                        (or (:nested-fragments m) #{})
-                                        all-nested-fragments))]
-        (assoc m
-               :selections selections'
-               :nested-fragments nested-fragments'))
-      m)))
+   (if-let [sub-selections (-> m :selections seq)]
+     (let [selections' (->> sub-selections
+                            (mapv #(selection schema % type))
+                            coalesce-selections)
+           all-nested-fragments (keepv :nested-fragments selections')
+           nested-fragments' (when (seq all-nested-fragments)
+                               (reduce into
+                                       (or (:nested-fragments m) #{})
+                                       all-nested-fragments))]
+       (assoc m
+              :selections selections'
+              :nested-fragments nested-fragments'))
+     m)))
 
 (defn ^:private expand-fragment-type-to-concrete-types
   "Expands a single type to a set of concrete types names.  For unions, this is
@@ -1108,7 +1114,7 @@
                                :type on-type
                                :selections selections)
                         (cond-> directives
-                                (assoc :directives (convert-parsed-directives schema directives))))
+                          (assoc :directives (convert-parsed-directives schema directives))))
                   fragment-type (get schema on-type)]
               (when (nil? fragment-type)
                 (throw (ex-info (format "Fragment %s references unknown type %s."
@@ -1340,8 +1346,8 @@
   invoking [[prepare-with-query-variables]]."
   [parsed-query]
   (not
-    (or (some ::needs-prepare? (:selections parsed-query))
-        (some ::needs-prepare? (-> parsed-query :fragments vals)))))
+   (or (some ::needs-prepare? (:selections parsed-query))
+       (some ::needs-prepare? (-> parsed-query :fragments vals)))))
 
 (defn prepare-with-query-variables
   "Given a parsed query data structure and a map of variables,

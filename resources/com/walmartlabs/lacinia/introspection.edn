@@ -30,9 +30,7 @@
     :ofType {:type :__Type
              :resolve :of-type}
     :specifiedByUrl {:type String
-                     :resolve :specified-by-url}
-    :appliedDirectives {:type (non-null (list :__AppliedDirective))
-                        :resolve :applied-directives}}}
+                     :resolve :specified-by-url}}}
 
   :__Field
   {:fields
@@ -42,9 +40,7 @@
     :type {:type (non-null :__Type)
            :resolve :nested-type}
     :isDeprecated {:type (non-null Boolean)}
-    :deprecationReason {:type String}
-    :appliedDirectives {:type (non-null (list :__AppliedDirective))
-                        :resolve :applied-directives}}}
+    :deprecationReason {:type String}}}
 
   :__InputValue
   {:fields
@@ -53,35 +49,21 @@
     :type {:type (non-null :__Type)
            :resolve :nested-type}
     :defaultValue {:type String
-                   :resolve :default-value}
-    :appliedDirectives {:type (non-null (list :__AppliedDirective))
-                        :resolve :applied-directives}}}
+                   :resolve :default-value}}}
 
   :__EnumValue
   {:fields
    {:name {:type (non-null String)}
     :description {:type String}
     :isDeprecated {:type (non-null Boolean)}
-    :deprecationReason {:type String}
-    :appliedDirectives {:type (non-null (list :__AppliedDirective))
-                        :resolve :applied-directives}}}
+    :deprecationReason {:type String}}}
 
   :__Directive
   {:fields
    {:name {:type (non-null String)}
     :description {:type String}
     :locations {:type (non-null (list :__DirectiveLocation))}
-    :args {:type (non-null (list :__InputValue))}}}
-
-  :__AppliedDirective
-  {:fields
-   {:name {:type (non-null String)}
-    :args {:type (non-null (list :__DirectiveArgument))}}}
-
-  :__DirectiveArgument
-  {:fields
-   {:name {:type (non-null String)}
-    :value {:type String}}}}}
+    :args {:type (non-null (list :__InputValue))}}}}
 
  :enums
  {:__TypeKind

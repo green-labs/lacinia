@@ -353,16 +353,6 @@
   (when (= :scalar category)
     (:specified-by type-def)))
 
-(defn ^:private resolve-applied-directives
-  "Resolves applied directives for any schema element that can have directives"
-  [context _ element]
-  (let [directives (:directives element)]
-    (for [{:keys [directive-type directive-args]} directives]
-      {:name (name directive-type)
-       :args (for [[arg-name arg-value] directive-args]
-               {:name (name arg-name)
-                :value (str arg-value)})})))
-
 (defn introspection-schema
   "Builds an returns the introspection schema, which can be merged into the user schema."
   []
@@ -380,5 +370,4 @@
                               :of-type resolve-of-type
                               :possible-types resolve-possible-types
                               :default-value default-value
-                              :specified-by-url resolve-specified-by-url
-                              :applied-directives resolve-applied-directives})))
+                              :specified-by-url resolve-specified-by-url})))

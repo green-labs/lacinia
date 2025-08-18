@@ -1883,6 +1883,9 @@
                                                      (assoc :directive-type directive-type)
                                                      (update :args (fn [args]
                                                                      (map-kvs #(compile-directive-arg directive-type %1 %2) args))))])]
+    ;; TODO: This only includes type system directives (@deprecated, @specifiedBy).
+    ;; Executable directives (@skip, @include) are defined separately in parser.clj.
+    ;; Future improvement: include all builtin directives here for consistency.
     (assoc schema ::directive-defs
                   (map-kvs compile-directive-args
                     (assoc directive-defs

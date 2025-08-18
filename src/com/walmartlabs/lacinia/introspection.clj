@@ -132,7 +132,11 @@
                    (:args directive-def)))})
 
 (defn ^:private get-builtin-directives
-  "Returns the built-in GraphQL directives"
+  "Returns the built-in GraphQL directives for introspection.
+  
+  TODO: This duplicates some logic from parser.clj's builtin-directives.
+  Future improvement: Consolidate all builtin directive definitions into
+  a single source of truth shared between parser and schema compilation."
   []
   (let [not-null-boolean {:kind :non-null
                           :type {:kind :root
@@ -167,7 +171,13 @@
                                  :type :String}}}]}]))
 
 (defn ^:private get-all-directives
-  "Returns all directives (built-in and custom) for the schema"
+  "Returns all directives (built-in and custom) for the schema.
+  
+  TODO: Current architecture has inconsistencies:
+  - @skip, @include are defined in parser.clj but not in schema directive-defs
+  - @deprecated, @specifiedBy are in schema directive-defs but duplicated here
+  Future improvement: Ensure all builtin directives are properly defined
+  in schema directive-defs for consistency."
   [schema]
   (let [directive-defs (:com.walmartlabs.lacinia.schema/directive-defs schema)
         custom-directives (->> directive-defs

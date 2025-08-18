@@ -59,7 +59,7 @@
       ;; Check custom directive details
       (is (= "A custom directive for objects" (:description custom-directive)))
       (is (= [:OBJECT] (:locations custom-directive)))
-      (is (empty? (:args custom-directive)))))
+      (is (empty? (:args custom-directive))))
 
 (deftest directive-with-default-value-introspection
   (let [test-schema {:directive-defs
@@ -105,7 +105,25 @@
       (is (= "max" (:name max-arg)))
       (is (= "Maximum number of items" (:description max-arg)))
       (is (= "100" (:defaultValue max-arg)))
-      (is (= "Int" (get-in max-arg [:type :name]))))))
+      (is (= "Int" (get-in max-arg [:type :name])))))
+
+(deftest simple-applied-directives-test
+  ;; Just test that we can access directive information from compiled fields
+  (let [test-schema {:objects
+                     {:User {:fields {:email {:type 'String
+                                              :directives [{:directive-type :deprecated
+                                                            :directive-args {:reason "Use contactInfo instead"}}]}}}}
+                     :queries
+                     {:user {:type :User}}}
+        
+        compiled-schema (schema/compile test-schema)
+        user-type (get compiled-schema :User)
+        email-field (get-in user-type [:fields :email])]
+    
+    ;; Check that directive information is preserved in compiled schema
+    (is (= 1 (count (:directives email-field))))
+    (is (= :deprecated (-> email-field :directives first :directive-type)))
+    (is (= "Use contactInfo instead" (-> email-field :directives first :directive-args :reason))))))
 
 (comment
   (run-tests))

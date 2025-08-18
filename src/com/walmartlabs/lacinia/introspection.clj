@@ -103,6 +103,78 @@
                              (-> % :deprecated is-deprecated? not)))
                 (sort-by :field-name))))))
 
+(defn ^:private convert-location
+  "Converts a directive location keyword to its GraphQL enum value format"
+  [location]
+  (-> location
+      name
+      str/upper-case
+      (str/replace "-" "_")
+      keyword))
+
+(defn ^:private convert-directive-arg
+  "Converts a directive argument definition to introspection format"
+  [arg-name arg-def]
+  (let [{:keys [kind type]} (:type arg-def)]
+    {:name (name arg-name)
+     :description (:description arg-def)
+     ::type-map {:kind kind :type type}
+     ::default-value (:default-value arg-def)}))
+
+(defn ^:private convert-directive
+  "Converts a directive definition to introspection format"
+  [[directive-name directive-def]]
+  {:name (name directive-name)
+   :description (:description directive-def)
+   :locations (vec (map convert-location (:locations directive-def)))
+   :args (vec (map (fn [[arg-name arg-def]] 
+                     (convert-directive-arg arg-name arg-def))
+                   (:args directive-def)))})
+
+(defn ^:private get-builtin-directives
+  "Returns the built-in GraphQL directives"
+  []
+  (let [not-null-boolean {:kind :non-null
+                          :type {:kind :root
+                                 :type :Boolean}}]
+    [{:name "skip"
+      :description "Skip the selection only when the `if` argument is true."
+      :locations [:INLINE_FRAGMENT :FIELD :FRAGMENT_SPREAD]
+      :args [{:name "if"
+              :description "Triggering argument for skip directive."
+              ::type-map not-null-boolean}]}
+     {:name "include"
+      :description "Include the selection only when the `if` argument is true."
+      :locations [:INLINE_FRAGMENT :FIELD :FRAGMENT_SPREAD]
+      :args [{:name "if"
+              :description "Triggering argument for include directive."
+              ::type-map not-null-boolean}]}
+     {:name "deprecated"
+      :description "Marks an element of a GraphQL schema as no longer supported."
+      :locations [:FIELD_DEFINITION :ENUM_VALUE :ARGUMENT_DEFINITION :INPUT_FIELD_DEFINITION]
+      :args [{:name "reason"
+              :description "Reason for deprecation."
+              ::type-map {:kind :root
+                          :type :String}
+              ::default-value "No longer supported"}]}
+     {:name "specifiedBy"
+      :description "Exposes a URL that specifies the behavior of this scalar."
+      :locations [:SCALAR]
+      :args [{:name "url"
+              :description "The URL that specifies the behavior of this scalar."
+              ::type-map {:kind :non-null
+                          :type {:kind :root
+                                 :type :String}}}]}]))
+
+(defn ^:private get-all-directives
+  "Returns all directives (built-in and custom) for the schema"
+  [schema]
+  (let [directive-defs (:com.walmartlabs.lacinia.schema/directive-defs schema)
+        custom-directives (->> directive-defs
+                              (remove (fn [[name _]] (#{:deprecated} name)))
+                              (map convert-directive))]
+    (vec (concat (get-builtin-directives) custom-directives))))
+
 (defn ^:private resolve-root-schema
   [context _ _]
   (let [schema (get context constants/schema-key)
@@ -116,22 +188,8 @@
         omit-subs (-> subs-root :fields empty?)
         type-names' (cond-> (set type-names)
                       omit-mutations (disj (:mutation root))
-                      omit-subs (disj (:subscription root)))
-        not-null-boolean {:kind :non-null
-                          :type {:kind :root
-                                 :type :Boolean}}]
-    (cond-> {:directives [{:name "skip"
-                           :description "Skip the selection only when the `if` argument is true."
-                           :locations [:INLINE_FRAGMENT :FIELD :FRAGMENT_SPREAD]
-                           :args [{:name "if"
-                                   :description "Triggering argument for skip directive."
-                                   ::type-map not-null-boolean}]}
-                          {:name "include"
-                           :description "Include the selection only when the `if` argument is true."
-                           :locations [:INLINE_FRAGMENT :FIELD :FRAGMENT_SPREAD]
-                           :args [{:name "if"
-                                   :description "Triggering argument for include directive."
-                                   ::type-map not-null-boolean}]}]
+                      omit-subs (disj (:subscription root)))]
+    (cond-> {:directives (get-all-directives schema)
              :types (->> type-names'
                          sort
                          (map #(type-name->schema-type schema %)))

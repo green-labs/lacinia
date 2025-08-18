@@ -171,7 +171,7 @@
   [schema]
   (let [directive-defs (:com.walmartlabs.lacinia.schema/directive-defs schema)
         custom-directives (->> directive-defs
-                              (remove (fn [[name _]] (#{:deprecated} name)))
+                              (remove (fn [[name _]] (#{:deprecated :specifiedBy} name)))
                               (map convert-directive))]
     (vec (concat (get-builtin-directives) custom-directives))))
 

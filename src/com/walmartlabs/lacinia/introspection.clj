@@ -158,13 +158,7 @@
               ::type-map not-null-boolean}]}]))
 
 (defn ^:private get-all-directives
-  "Returns all directives (built-in and custom) for the schema.
-  
-  TODO: Current architecture has inconsistencies:
-  - @skip, @include are defined in parser.clj but not in schema directive-defs
-  - @deprecated, @specifiedBy are in schema directive-defs but duplicated here
-  Future improvement: Ensure all builtin directives are properly defined
-  in schema directive-defs for consistency."
+  "Returns all directives (built-in and custom) for the schema."
   [schema]
   (let [directive-defs (:com.walmartlabs.lacinia.schema/directive-defs schema)
         custom-directives (->> directive-defs

@@ -1868,16 +1868,16 @@
                                       arg-type (get schema arg-type-name)]
                                   (when-not arg-type
                                     (throw (ex-info "Unknown argument type."
-                                             {:arg-name arg-name
-                                              :arg-type-name arg-type-name
-                                              :schema-types (type-map schema)})))
+                                                    {:arg-name arg-name
+                                                     :arg-type-name arg-type-name
+                                                     :schema-types (type-map schema)})))
                                   (when-not (#{:enum :scalar :input-object} (:category arg-type))
                                     (throw (ex-info "Directive argument is not a scalar, enum, or input object type."
-                                             {:arg-name arg-name
-                                              :arg-type-name arg-type-name
-                                              :schema-types (type-map schema)})))
+                                                    {:arg-name arg-name
+                                                     :arg-type-name arg-type-name
+                                                     :schema-types (type-map schema)})))
                                   [arg-name (assoc arg-def'
-                                              :qualified-name (qualified-name nil directive-type arg-name))]))
+                                                   :qualified-name (qualified-name nil directive-type arg-name))]))
         compile-directive-args (fn [directive-type directive-def]
                                  [directive-type (-> directive-def
                                                      (assoc :directive-type directive-type)
@@ -1885,14 +1885,19 @@
                                                                      (map-kvs #(compile-directive-arg directive-type %1 %2) args))))])]
     ;; TODO: This only includes type system directives (@deprecated, @specifiedBy).
     ;; Executable directives (@skip, @include) are defined separately in parser.clj.
-    ;; Future improvement: include all builtin directives here for consistency.
+    ;; Future improvement: include all builtin directives here for consistency. 
     (assoc schema ::directive-defs
-                  (map-kvs compile-directive-args
+           (map-kvs compile-directive-args
                     (assoc directive-defs
-                      :deprecated {:args {:reason {:type 'String}}
-                                   :locations #{:argument-definition :enum-value :field-definition :input-field-definition}}
-                      :specifiedBy {:args {:url {:type '(non-null String)}}
-                                    :locations #{:scalar}})))))
+                           :deprecated {:args {:reason {:type 'String
+                                                        :default-value "No longer supported"
+                                                        :description "Reason for deprecation."}}
+                                        :description "Marks an element of a GraphQL schema as no longer supported."
+                                        :locations #{:argument-definition :enum-value :field-definition :input-field-definition}}
+                           :specifiedBy {:args {:url {:type '(non-null String)
+                                                      :description "The URL that specifies the behavior of this scalar."}}
+                                         :description "Exposes a URL that specifies the behavior of this scalar."
+                                         :locations #{:scalar}})))))
 
 (defn ^:private validate-directives-by-category
   [schema category]

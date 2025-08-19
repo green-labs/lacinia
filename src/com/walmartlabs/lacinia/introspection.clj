@@ -15,15 +15,15 @@
 (ns ^:no-doc com.walmartlabs.lacinia.introspection
   "Uses the compiled schema to expose introspection."
   (:require
-    [clojure.edn :as edn]
-    [clojure.java.io :as io]
-    [com.walmartlabs.lacinia.util :as util]
-    [com.walmartlabs.lacinia.internal-utils :refer [remove-keys is-internal-type-name? cond-let
-                                                    get-nested keepv]]
-    [com.walmartlabs.lacinia.constants :as constants]
-    [clojure.string :as str]
-    [clojure.data.json :as json]
-    [clojure.spec.alpha :as s]))
+   [clojure.edn :as edn]
+   [clojure.java.io :as io]
+   [com.walmartlabs.lacinia.util :as util]
+   [com.walmartlabs.lacinia.internal-utils :refer [remove-keys is-internal-type-name? cond-let
+                                                   get-nested keepv]]
+   [com.walmartlabs.lacinia.constants :as constants]
+   [clojure.string :as str]
+   [clojure.data.json :as json]
+   [clojure.spec.alpha :as s]))
 
 (def ^:private category->kind
   {:scalar :SCALAR
@@ -127,7 +127,8 @@
   {:name (name directive-name)
    :description (:description directive-def)
    :locations (vec (map convert-location (:locations directive-def)))
-   :args (vec (map (fn [[arg-name arg-def]] 
+   :repeatable (get directive-def :repeatable false)
+   :args (vec (map (fn [[arg-name arg-def]]
                      (convert-directive-arg arg-name arg-def))
                    (:args directive-def)))})
 
@@ -144,31 +145,17 @@
     [{:name "skip"
       :description "Skip the selection only when the `if` argument is true."
       :locations [:INLINE_FRAGMENT :FIELD :FRAGMENT_SPREAD]
+      :repeatable false
       :args [{:name "if"
               :description "Triggering argument for skip directive."
               ::type-map not-null-boolean}]}
      {:name "include"
       :description "Include the selection only when the `if` argument is true."
       :locations [:INLINE_FRAGMENT :FIELD :FRAGMENT_SPREAD]
+      :repeatable false
       :args [{:name "if"
               :description "Triggering argument for include directive."
-              ::type-map not-null-boolean}]}
-     {:name "deprecated"
-      :description "Marks an element of a GraphQL schema as no longer supported."
-      :locations [:FIELD_DEFINITION :ENUM_VALUE :ARGUMENT_DEFINITION :INPUT_FIELD_DEFINITION]
-      :args [{:name "reason"
-              :description "Reason for deprecation."
-              ::type-map {:kind :root
-                          :type :String}
-              ::default-value "No longer supported"}]}
-     {:name "specifiedBy"
-      :description "Exposes a URL that specifies the behavior of this scalar."
-      :locations [:SCALAR]
-      :args [{:name "url"
-              :description "The URL that specifies the behavior of this scalar."
-              ::type-map {:kind :non-null
-                          :type {:kind :root
-                                 :type :String}}}]}]))
+              ::type-map not-null-boolean}]}]))
 
 (defn ^:private get-all-directives
   "Returns all directives (built-in and custom) for the schema.
@@ -181,8 +168,7 @@
   [schema]
   (let [directive-defs (:com.walmartlabs.lacinia.schema/directive-defs schema)
         custom-directives (->> directive-defs
-                              (remove (fn [[name _]] (#{:deprecated :specifiedBy} name)))
-                              (map convert-directive))]
+                               (map convert-directive))]
     (vec (concat (get-builtin-directives) custom-directives))))
 
 (defn ^:private resolve-root-schema
@@ -210,7 +196,6 @@
 
       (not omit-subs)
       (assoc :subscriptionType (schema-type schema subs-root)))))
-
 
 (defn ^:private resolve-root-type
   [context args _]
@@ -281,16 +266,16 @@
 (defmulti emit-default-value
   (fn [schema type-map value]
     (cond-let
-      (nil? value)
-      ::null
+     (nil? value)
+     ::null
 
-      :let [kind (:kind type-map)]
+     :let [kind (:kind type-map)]
 
-      (= :root kind)
-      (get-nested schema [(:type type-map) :category])
+     (= :root kind)
+     (get-nested schema [(:type type-map) :category])
 
-      :else
-      kind)))
+     :else
+     kind)))
 
 (defmethod emit-default-value ::null
   [_ _ _]
@@ -328,15 +313,15 @@
   [schema type-map value]
   (let [type-def (get schema (:type type-map))
         kvs (keepv (fn [field-def]
-                    (let [field-name (:field-name field-def)
-                          field-value (emit-default-value schema
-                                                          (:type field-def)
-                                                          (get value field-name))]
-                      (when field-value
-                        (str (name field-name)
-                             ":"
-                             field-value))))
-                  (->> type-def :fields vals (sort-by :field-name)))]
+                     (let [field-name (:field-name field-def)
+                           field-value (emit-default-value schema
+                                                           (:type field-def)
+                                                           (get value field-name))]
+                       (when field-value
+                         (str (name field-name)
+                              ":"
+                              field-value))))
+                   (->> type-def :fields vals (sort-by :field-name)))]
     (str "{"
          (str/join "," kvs)
          "}")))
@@ -352,6 +337,11 @@
   [_ _ {:keys [::category ::type-def] :as _value}]
   (when (= :scalar category)
     (:specified-by type-def)))
+
+(defn ^:private resolve-is-repeatable
+  "Resolves isRepeatable field for a directive"
+  [_ _ directive]
+  (:repeatable directive))
 
 (defn introspection-schema
   "Builds an returns the introspection schema, which can be merged into the user schema."
@@ -370,4 +360,5 @@
                               :of-type resolve-of-type
                               :possible-types resolve-possible-types
                               :default-value default-value
-                              :specified-by-url resolve-specified-by-url})))
+                              :specified-by-url resolve-specified-by-url
+                              :is-repeatable resolve-is-repeatable})))

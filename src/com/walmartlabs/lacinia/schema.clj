@@ -1646,35 +1646,39 @@
                         :directive-type directive-type
                         :allowed-locations locations}))))))
 
-(defn ^:private validate-directives-in-def
-  [schema object-def location]
-  ;; First check for repeatable directive violations
-  (let [element-name (or (:qualified-name object-def) (:type-name object-def) (:arg-name object-def) "unknown")
-        directive-counts (frequencies (map :directive-type (:directives object-def)))]
-    (doseq [[directive-type count] directive-counts]
-      (when (> count 1)
-        (let [directive-def (get-nested schema [::directive-defs directive-type])
-              repeatable? (get directive-def :repeatable false)]
-          (when-not repeatable?
-            (throw (ex-info (format "The directive %s is defined as non-repeatable, but used %d times on %s."
-                                    directive-type count element-name)
-                            {:directive-type directive-type
-                             :count count
-                             :element-name element-name})))))))
-  ;; Check for unknown directives and location violations
-  (doseq [{:keys [directive-type]} (:directives object-def)
-          :let [directive-def (get-nested schema [::directive-defs directive-type])]]
-    (when-not directive-def
-      (unknown-directive location object-def directive-type))
+(defn ^:private non-repeatable-directive
+  [element-def directive-def count]
+  (let [element-name (or (:qualified-name element-def) (:type-name element-def) (:arg-name element-def) "unknown")
+        directive-type (:directive-type directive-def)]
+    (throw (ex-info (format "The directive %s is defined as non-repeatable, but used %d times on %s."
+                            directive-type count element-name)
+                    {:directive-type directive-type
+                     :count count
+                     :element-name element-name}))))
 
-    (when-not (-> directive-def :locations (contains? location))
-      (inapplicable-directive location object-def directive-def))))
+(defn ^:private validate-directives-in-def
+  [schema element-def location]
+  (let [directive-counts (frequencies (map :directive-type (:directives element-def)))]
+    ;; Check each unique directive type
+    (doseq [directive-type (distinct (map :directive-type (:directives element-def)))
+            :let [directive-def (get-nested schema [::directive-defs directive-type])
+                  count (get directive-counts directive-type)]]
+      ;; Check directive existence
+      (when-not directive-def
+        (unknown-directive location element-def directive-type))
+      
+      ;; Check location applicability
+      (when-not (-> directive-def :locations (contains? location))
+        (inapplicable-directive location element-def directive-def))
+      
+      ;; Check repeatability
+      (when (and (> count 1) (not (:repeatable directive-def false)))
+        (non-repeatable-directive element-def directive-def count)))))
 
 (defn ^:private verify-fields-and-args
   "Verifies that the type of every field and every field argument is valid."
   [schema object-def]
-  (let [directive-defs (::directive-defs schema)
-        input-object? (= :input-object (:category object-def))
+  (let [input-object? (= :input-object (:category object-def))
         location (if input-object?
                    :input-field-definition
                    :field-definition)]

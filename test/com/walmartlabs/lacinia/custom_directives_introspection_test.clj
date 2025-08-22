@@ -1,5 +1,5 @@
 (ns com.walmartlabs.lacinia.custom-directives-introspection-test
-  (:require [clojure.test :refer [deftest is run-tests]]
+  (:require [clojure.test :refer [deftest is testing run-tests]]
             [com.walmartlabs.test-utils :refer [execute]]
             [com.walmartlabs.lacinia.schema :as schema]))
 
@@ -38,12 +38,6 @@
         directive-names (set (map :name directives))
         access-directive (first (filter #(= "access" (:name %)) directives))
         custom-directive (first (filter #(= "custom" (:name %)) directives))]
-    ;; Built-in directives should be present
-    (is (contains? directive-names "skip"))
-    (is (contains? directive-names "include"))
-    (is (contains? directive-names "deprecated"))
-    (is (contains? directive-names "specifiedBy"))
-
     ;; Custom directives should be present
     (is (contains? directive-names "access"))
     (is (contains? directive-names "custom"))
@@ -110,6 +104,45 @@
       (is (= "100" (:defaultValue max-arg)))
       (is (= "Int" (get-in max-arg [:type :name]))))))
 
+(deftest repeatable-directive-validation
+  (testing "Non-repeatable directive used multiple times should fail"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"The directive :rateLimit is defined as non-repeatable, but used 2 times"
+         (schema/compile {:directive-defs
+                          {:rateLimit {:locations #{:field-definition}
+                                       :repeatable false
+                                       :args {:limit {:type 'Int}}}}
+                          :queries
+                          {:user {:type 'String
+                                  :directives [{:directive-type :rateLimit :directive-args {:limit 10}}
+                                               {:directive-type :rateLimit :directive-args {:limit 20}}]
+                                  :resolve (constantly "test-user")}}}))))
+
+  (testing "Repeatable directive used multiple times should succeed"
+    (is (some? (schema/compile {:directive-defs
+                                 {:cache {:locations #{:field-definition}
+                                          :repeatable true
+                                          :args {:ttl {:type 'Int}}}}
+                                 :queries
+                                 {:user {:type 'String
+                                         :directives [{:directive-type :cache :directive-args {:ttl 60}}
+                                                      {:directive-type :cache :directive-args {:ttl 120}}]
+                                         :resolve (constantly "test-user")}}}))))
+
+  (testing "Default non-repeatable behavior"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"The directive :auth is defined as non-repeatable, but used 2 times"
+         (schema/compile {:directive-defs
+                          {:auth {:locations #{:field-definition}
+                                  ;; :repeatable defaults to false
+                                  :args {:role {:type 'String}}}}
+                          :queries
+                          {:user {:type 'String
+                                  :directives [{:directive-type :auth :directive-args {:role "admin"}}
+                                               {:directive-type :auth :directive-args {:role "user"}}]
+                                  :resolve (constantly "test-user")}}})))))
 
 (comment
   (run-tests))

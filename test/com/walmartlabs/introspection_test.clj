@@ -517,7 +517,25 @@
                                                   :name "Boolean"
                                                   :ofType nil}}}]
                           :description "Include the selection only when the `if` argument is true."
-                          :name "include"}]
+                          :name "include"}
+                         {:args [{:defaultValue "\"No longer supported\""
+                                  :description "Reason for deprecation."
+                                  :name "reason"
+                                  :type {:kind :SCALAR
+                                         :name "String"
+                                         :ofType nil}}]
+                          :description "Marks an element of a GraphQL schema as no longer supported."
+                          :name "deprecated"}
+                         {:args [{:defaultValue nil
+                                  :description "The URL that specifies the behavior of this scalar."
+                                  :name "url"
+                                  :type {:kind :NON_NULL
+                                         :name nil
+                                         :ofType {:kind :SCALAR
+                                                  :name "String"
+                                                  :ofType nil}}}]
+                          :description "Exposes a URL that specifies the behavior of this scalar."
+                          :name "specifiedBy"}]
             :mutationType {:name "Mutation"}
             :queryType {:name "Query"}
             :types [{:description nil
